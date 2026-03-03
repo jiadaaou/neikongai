@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login – AI-Powered Compliance Management</title>
+
+  <!-- Google Fonts: Playfair Display + Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ===================== NAVIGATION ===================== -->
+  <header class="navbar" role="banner">
+    <div class="navbar__inner container">
+
+      <!-- Logo -->
+      <a href="#" class="navbar__brand" aria-label="Login homepage">
+        <!-- SVG logo mark -->
+        <svg class="navbar__logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="8" fill="#6c63ff"/>
+          <circle cx="16" cy="16" r="6" stroke="#fff" stroke-width="2"/>
+          <circle cx="16" cy="16" r="2" fill="#fff"/>
+          <line x1="16" y1="4" x2="16" y2="10" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <line x1="16" y1="22" x2="16" y2="28" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <line x1="4" y1="16" x2="10" y2="16" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+          <line x1="22" y1="16" x2="28" y2="16" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="navbar__brand-text">Login</span>
+      </a>
+
+      <!-- Desktop nav links -->
+      <nav class="navbar__links" aria-label="Primary navigation">
+        <a href="#hero" class="navbar__link">Home</a>
+        <a href="#solutions" class="navbar__link">Solutions</a>
+        <a href="#features" class="navbar__link">Features</a>
+        <a href="#pricing" class="navbar__link">Pricing</a>
+        <a href="#about" class="navbar__link">About</a>
+        <a href="#contact" class="navbar__link">Contact</a>
+      </nav>
+
+      <!-- Login button -->
+      <a href="#" class="btn btn--outline">Login</a>
+
+      <!-- Hamburger (mobile) -->
+      <button class="navbar__hamburger" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+
+    <!-- Mobile menu -->
+    <nav class="navbar__mobile" id="mobile-menu" aria-label="Mobile navigation" hidden>
+      <a href="#hero" class="navbar__mobile-link">Home</a>
+      <a href="#solutions" class="navbar__mobile-link">Solutions</a>
+      <a href="#features" class="navbar__mobile-link">Features</a>
+      <a href="#pricing" class="navbar__mobile-link">Pricing</a>
+      <a href="#about" class="navbar__mobile-link">About</a>
+      <a href="#contact" class="navbar__mobile-link">Contact</a>
+      <a href="#" class="btn btn--outline navbar__mobile-btn">Login</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ===================== HERO ===================== -->
+    <section class="hero" id="hero" aria-label="Hero section">
+
+      <!-- Decorative circles / curves -->
+      <div class="hero__deco hero__deco--tl" aria-hidden="true"></div>
+      <div class="hero__deco hero__deco--tr" aria-hidden="true"></div>
+      <div class="hero__deco hero__deco--bl" aria-hidden="true"></div>
+      <div class="hero__curve" aria-hidden="true">
+        <svg viewBox="0 0 900 400" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+          <path d="M0 300 Q200 100 450 250 T900 150" stroke="rgba(255,255,255,0.06)" stroke-width="2" fill="none"/>
+          <path d="M0 350 Q300 150 600 300 T900 200" stroke="rgba(255,255,255,0.04)" stroke-width="2" fill="none"/>
+        </svg>
+      </div>
+
+      <div class="hero__content container">
+        <!-- Badge -->
+        <span class="badge badge--dark">Hero</span>
+
+        <!-- Headline -->
+        <h1 class="hero__title fade-in">AI-Powered Compliance Management</h1>
+        <p class="hero__subtitle fade-in delay-1">Streamline your legal and regulatory processes with intelligent automation</p>
+
+        <!-- CTA -->
+        <a href="#features" class="btn btn--primary hero__cta fade-in delay-2">Get Started Free</a>
+      </div>
+
+      <!-- ===== DASHBOARD MOCK-UP ===== -->
+      <div class="dashboard-wrapper fade-in delay-3" aria-label="Product dashboard preview" role="img">
+        <div class="dashboard">
+
+          <!-- Sidebar -->
+          <aside class="db-sidebar">
+            <div class="db-sidebar__brand">
+              <svg width="20" height="20" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect width="32" height="32" rx="8" fill="#6c63ff"/>
+                <circle cx="16" cy="16" r="6" stroke="#fff" stroke-width="2"/>
+                <circle cx="16" cy="16" r="2" fill="#fff"/>
+              </svg>
+              <span>Login</span>
+            </div>
+            <nav class="db-sidebar__nav" aria-label="Dashboard navigation">
+              <a class="db-nav-item" href="#">Home</a>
+              <a class="db-nav-item db-nav-item--active" href="#">Equities</a>
+              <a class="db-nav-item" href="#">Ledger</a>
+              <a class="db-nav-item" href="#">Cashflow</a>
+              <a class="db-nav-item" href="#">Forex</a>
+              <a class="db-nav-item" href="#">Banking</a>
+              <a class="db-nav-item" href="#">Investing</a>
+              <a class="db-nav-item" href="#">Lending</a>
+              <a class="db-nav-item" href="#">Derivatives</a>
+              <a class="db-nav-item" href="#">Insights</a>
+              <a class="db-nav-item" href="#">Customization</a>
+            </nav>
+          </aside>
+
+          <!-- Main area -->
+          <section class="db-main">
+            <header class="db-main__header">
+              <span class="db-username">Aagin</span>
+              <div class="db-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <span>Saved to list</span>
+              </div>
+            </header>
+
+            <!-- Cards row -->
+            <div class="db-cards">
+              <div class="db-card">
+                <p class="db-card__label">Dashboard Totality</p>
+                <p class="db-card__value">$124,530</p>
+                <span class="db-card__trend db-card__trend--up">+4.2%</span>
+              </div>
+              <div class="db-card">
+                <p class="db-card__label">Portfolio</p>
+                <p class="db-card__value">$89,210</p>
+                <span class="db-card__trend db-card__trend--down">-1.1%</span>
+              </div>
+            </div>
+
+            <!-- Table: Today -->
+            <p class="db-table-label">Today</p>
+            <table class="db-table" aria-label="Today's transactions">
+              <tbody>
+                <tr><td>AAPL</td><td>$183.45</td><td class="positive">+0.8%</td></tr>
+                <tr><td>TSLA</td><td>$248.90</td><td class="negative">-2.3%</td></tr>
+              </tbody>
+            </table>
+
+            <!-- Table: Compliant -->
+            <p class="db-table-label">Compliant</p>
+            <table class="db-table" aria-label="Compliant entries">
+              <tbody>
+                <tr><td>Policy A</td><td>Active</td><td class="positive">✓</td></tr>
+                <tr><td>Policy B</td><td>Review</td><td class="negative">!</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <!-- Right panel -->
+          <aside class="db-panel">
+            <p class="db-panel__value">2.0</p>
+            <ul class="db-panel__list">
+              <li class="db-panel__item">
+                <span class="db-panel__dot db-panel__dot--yellow"></span>
+                <span>Gas Commission</span>
+                <span class="db-panel__num">0.42</span>
+              </li>
+              <li class="db-panel__item">
+                <span class="db-panel__dot db-panel__dot--blue"></span>
+                <span>Robin Share</span>
+                <span class="db-panel__num">0.67</span>
+              </li>
+              <li class="db-panel__item">
+                <span class="db-panel__dot db-panel__dot--green"></span>
+                <span>Onion Store</span>
+                <span class="db-panel__num">0.35</span>
+              </li>
+              <li class="db-panel__item">
+                <span class="db-panel__dot db-panel__dot--red"></span>
+                <span>Range Main</span>
+                <span class="db-panel__num">0.56</span>
+              </li>
+            </ul>
+            <button class="btn btn--trade">Trade</button>
+          </aside>
+
+        </div><!-- /.dashboard -->
+      </div><!-- /.dashboard-wrapper -->
+    </section>
+
+    <!-- ===================== FEATURES ===================== -->
+    <section class="features" id="features" aria-labelledby="features-heading">
+      <div class="container">
+
+        <!-- Badge -->
+        <span class="badge badge--purple">Hero</span>
+
+        <h2 class="features__title" id="features-heading">Scrietied Folly Uuligies</h2>
+
+        <!-- Cards grid -->
+        <div class="features__grid">
+
+          <!-- Card 1 -->
+          <article class="feature-card fade-in-scroll">
+            <div class="feature-card__icon feature-card__icon--purple" aria-hidden="true">
+              <!-- Cross-arrows SVG -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7 17L17 7M17 7H10M17 7V14"/>
+                <path d="M7 7L17 17M7 7H14M7 7V14"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Automated Policy Updates</h3>
+            <p class="feature-card__desc">Real-time updates, Vohs are updates regulfers, your seome affect cove ace aniry pogelitily.</p>
+          </article>
+
+          <!-- Card 2 -->
+          <article class="feature-card fade-in-scroll">
+            <div class="feature-card__icon feature-card__icon--green" aria-hidden="true">
+              <!-- Shield / document SVG -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L3 7v6c0 5 4 9 9 10 5-1 9-5 9-10V7z"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Risk Assessment</h3>
+            <p class="feature-card__desc">Predictive Analytics, aren't uddatally I mhe predictive and portality.</p>
+          </article>
+
+          <!-- Card 3 -->
+          <article class="feature-card fade-in-scroll feature-card--chart">
+            <div class="feature-card__icon feature-card__icon--blue" aria-hidden="true">
+              <!-- Check-circle SVG -->
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Audit Trail</h3>
+            <p class="feature-card__desc">Secure documentation, apointents of yourdns and divalt yporsation.</p>
+            <!-- Decorative mini chart -->
+            <svg class="feature-card__mini-chart" viewBox="0 0 80 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <polyline points="0,35 15,25 30,30 45,15 60,20 80,5" fill="none" stroke="#3b82f6" stroke-width="2"/>
+              <rect x="0" y="30" width="8" height="10" fill="#3b82f6" opacity="0.4" rx="1"/>
+              <rect x="12" y="22" width="8" height="18" fill="#3b82f6" opacity="0.4" rx="1"/>
+              <rect x="24" y="26" width="8" height="14" fill="#3b82f6" opacity="0.4" rx="1"/>
+              <rect x="36" y="12" width="8" height="28" fill="#3b82f6" opacity="0.5" rx="1"/>
+              <rect x="48" y="17" width="8" height="23" fill="#3b82f6" opacity="0.4" rx="1"/>
+              <rect x="60" y="4" width="8" height="36" fill="#3b82f6" opacity="0.5" rx="1"/>
+            </svg>
+          </article>
+
+        </div><!-- /.features__grid -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="footer" role="contentinfo">
+    <div class="footer__inner container">
+      <nav class="footer__links" aria-label="Footer navigation">
+        <a href="#" class="footer__link">Privacy Policy</a>
+        <a href="#" class="footer__link">Terms of Service</a>
+        <a href="#contact" class="footer__link">Contact Us</a>
+      </nav>
+      <p class="footer__copy">&copy; 2024 Copyright Appleasues</p>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
