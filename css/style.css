@@ -7,8 +7,8 @@
 :root {
   --color-dark:       #1a1a2e;
   --color-dark-alt:   #16213e;
-  --color-bg-light:   #e0e0e8;
-  --color-bg-section: #d5d5dc;
+  --color-bg-light:   #f0f0f5;
+  --color-bg-section: #eeeef4;
   --color-white:      #ffffff;
   --color-text:       #1e1e2e;
   --color-text-muted: #b0b8c8;
@@ -401,6 +401,7 @@ table { border-collapse: collapse; width: 100%; }
 .db-table td:nth-child(3) { text-align: right; }
 .positive { color: var(--color-green) !important; }
 .negative { color: var(--color-red) !important;   }
+.neutral  { color: var(--color-yellow) !important; }
 
 /* Right panel */
 .db-panel {
@@ -424,7 +425,7 @@ table { border-collapse: collapse; width: 100%; }
 
 /* ── FEATURES ───────────────────────────────────────────────── */
 .features {
-  background: var(--color-bg-section);
+  background: linear-gradient(to bottom, #e8e8f0 0%, var(--color-bg-section) 80px);
   padding: 90px 0 100px;
 }
 
