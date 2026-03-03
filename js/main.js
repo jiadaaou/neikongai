@@ -85,7 +85,14 @@
   onScroll(); // run once on load
 
   /* ── Scroll-triggered fade-in (IntersectionObserver) ───── */
+  // Threshold: element is 12% visible before triggering; lower than 0.15 default
+  // so tall cards on small viewports still animate in reliably.
+  var FADE_THRESHOLD = 0.12;
+
   function observeScrollEls () {
+    // `.is-observed` guard prevents double-observing on a static page. If
+    // elements were dynamically added and removed, callers should remove the
+    // class before re-adding the element to the DOM.
     const scrollEls = document.querySelectorAll('.fade-in-scroll:not(.is-observed)');
     if (!('IntersectionObserver' in window)) {
       scrollEls.forEach(function (el) { el.classList.add('is-visible'); });
@@ -101,7 +108,7 @@
           }
         });
       },
-      { threshold: 0.12 }
+      { threshold: FADE_THRESHOLD }
     );
 
     scrollEls.forEach(function (el) {
@@ -169,6 +176,29 @@
 
   /* ── FAQ Accordion ──────────────────────────────────────── */
   /**
+   * Shared helper: animate-collapse a FAQ body element to max-height 0.
+   * @param {HTMLElement} body - The element to collapse
+   */
+  function collapseFaqBody (body) {
+    body.style.maxHeight = body.scrollHeight + 'px';
+    body.classList.add('is-animating');
+    body.removeAttribute('hidden');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        body.style.transition = 'max-height 0.35s ease';
+        body.style.maxHeight  = '0';
+        body.addEventListener('transitionend', function handler () {
+          body.style.transition = '';
+          body.style.maxHeight  = '';
+          body.classList.remove('is-animating');
+          body.setAttribute('hidden', '');
+          body.removeEventListener('transitionend', handler);
+        });
+      });
+    });
+  }
+
+  /**
    * Each FAQ item has:
    *   .faq-item__trigger  (button, aria-expanded)
    *   .faq-item__body     (div, toggled with hidden attr + smooth animation)
@@ -181,25 +211,9 @@
       if (!body) return;
 
       if (isExpanded) {
-        // Collapse
+        // Collapse this item
         trigger.setAttribute('aria-expanded', 'false');
-        // Animate close
-        body.style.maxHeight = body.scrollHeight + 'px';
-        body.classList.add('is-animating');
-        body.removeAttribute('hidden');
-        requestAnimationFrame(function () {
-          requestAnimationFrame(function () {
-            body.style.transition = 'max-height 0.35s ease';
-            body.style.maxHeight  = '0';
-            body.addEventListener('transitionend', function handler () {
-              body.style.transition = '';
-              body.style.maxHeight  = '';
-              body.classList.remove('is-animating');
-              body.setAttribute('hidden', '');
-              body.removeEventListener('transitionend', handler);
-            });
-          });
-        });
+        collapseFaqBody(body);
       } else {
         // Expand — close any other open items first (directly, without simulating clicks)
         document.querySelectorAll('.faq-item__trigger[aria-expanded="true"]').forEach(function (other) {
@@ -208,22 +222,7 @@
           const otherBody = document.getElementById(otherId);
           if (!otherBody) return;
           other.setAttribute('aria-expanded', 'false');
-          otherBody.style.maxHeight  = otherBody.scrollHeight + 'px';
-          otherBody.classList.add('is-animating');
-          otherBody.removeAttribute('hidden');
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              otherBody.style.transition = 'max-height 0.35s ease';
-              otherBody.style.maxHeight  = '0';
-              otherBody.addEventListener('transitionend', function handler () {
-                otherBody.style.transition = '';
-                otherBody.style.maxHeight  = '';
-                otherBody.classList.remove('is-animating');
-                otherBody.setAttribute('hidden', '');
-                otherBody.removeEventListener('transitionend', handler);
-              });
-            });
-          });
+          collapseFaqBody(otherBody);
         });
 
         trigger.setAttribute('aria-expanded', 'true');
