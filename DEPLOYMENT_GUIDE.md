@@ -12,6 +12,7 @@
 3. [密钥（API Key / 数据库密码）怎么改——完整步骤](#3-密钥api-key--数据库密码怎么改完整步骤)
 4. [代码改动怎么从 GitHub 同步到服务器](#4-代码改动怎么从-github-同步到服务器)
 5. [常见问题 FAQ](#5-常见问题-faq)
+6. [「上传→修改→下载→删除GitHub」这个方法可行吗？](#6-上传修改下载删除github这个方法可行吗)
 
 ---
 
@@ -407,12 +408,123 @@ cat /var/www/neikongai/backend/.env | cut -d= -f1
 
 ---
 
+---
+
+## 6. 「上传→修改→下载→删除GitHub」这个方法可行吗？
+
+### 你描述的工作流程
+
+你的想法是：
+1. 把服务器代码传到 GitHub
+2. 让 AI 在 GitHub 上帮你改代码
+3. 改完后把代码下载回服务器
+4. 把 GitHub 上的文件全删掉
+5. 在服务器上运行网站
+
+**这个流程可以用，但有几个严重的坑，必须提前了解清楚。**
+
+---
+
+### ⚠️ 坑 1：.env 文件（密钥）绝对不能上传到 GitHub
+
+这是最重要的一点。你上传代码时，**必须把 `.env` 文件排除在外**。
+
+`.env` 文件里有你的数据库密码和 API Key。一旦上传到 GitHub（即使是私有仓库），这些密钥就处于风险中。你的项目已经发生过这个问题（旧的密钥已经泄露），所以务必先轮换密钥，再重新上传。
+
+**检查方法**：上传之前，在服务器上运行：
+```bash
+# 确认 .env 没有被 Git 跟踪
+cd /var/www/neikongai
+git status
+# 如果看到 backend/.env 出现在列表里，立刻执行：
+git rm --cached backend/.env
+echo "backend/.env" >> .gitignore
+git add .gitignore
+git commit -m "remove .env from git tracking"
+```
+
+---
+
+### ⚠️ 坑 2：从 GitHub 下载代码到服务器，方法要选对
+
+"下载回服务器"有两种方式，选错了会覆盖掉你服务器上已有的 `.env` 文件或数据库：
+
+#### 方式 A（推荐）：用 `git pull`
+
+```bash
+# 在服务器上执行
+cd /var/www/neikongai
+git pull origin main
+```
+
+**优点**：只更新有变化的代码文件，`.env` 文件完全不受影响（因为它不在 Git 里）。
+
+---
+
+#### 方式 B（危险）：直接解压覆盖
+
+```bash
+# ❌ 危险操作，可能覆盖 .env、数据库文件、上传的图片等
+cp -r ~/下载/neikongai/* /var/www/neikongai/
+```
+
+**风险**：如果你直接把 GitHub 下载的 zip 解压覆盖到服务器目录，可能会：
+- 覆盖服务器上的 `.env` 文件（导致密钥丢失，服务无法启动）
+- 覆盖用户上传的文件（`uploads/` 目录）
+- 覆盖数据库迁移状态
+
+---
+
+### ⚠️ 坑 3：删掉 GitHub 上的文件，以后没法用了
+
+"改完就删 GitHub"的想法，相当于每次修改都要重新上传，非常麻烦。
+
+**更好的做法**：GitHub 仓库保持私有（`Private`），只有你能看到。你把代码放在那里是安全的（只要不上传 `.env`）。下次需要修改，可以直接在 GitHub 上的代码基础上继续改，不需要重新上传。
+
+如果你担心安全，把仓库设为 **Private（私有）** 就够了：
+- GitHub → 仓库页面 → Settings → 拉到最底部 → Danger Zone → "Change repository visibility" → Private
+
+---
+
+### ✅ 你的方法改良版（推荐这样做）
+
+```
+第 1 步：确保 .env 不在 GitHub 里（只做一次）
+         服务器上 → git rm --cached backend/.env → 推送到 GitHub
+
+第 2 步：让 AI 在 GitHub 上帮你改代码
+         GitHub 网页 → AI 修改代码 → 代码 commit 到 GitHub
+
+第 3 步：把 GitHub 上改好的代码同步到服务器
+         服务器上 → git pull origin main
+                  （.env 文件完全不受影响）
+
+第 4 步：重启服务
+         服务器上 → sudo systemctl restart neikongai-backend
+
+第 5 步：（可选）把 GitHub 仓库设为 Private
+         不需要删除，Private 仓库只有你能看到，和不存在一样安全
+```
+
+---
+
+### 总结：你的问题的直接回答
+
+| 你的问题 | 答案 |
+|----------|------|
+| "传回服务器后能不能执行？" | **可以**，`git pull` 之后服务器代码就更新了，重启服务即可运行 |
+| "改完要把 GitHub 上的文件全删掉吗？" | **不需要**，把仓库设为 Private 就安全了，删了反而麻烦 |
+| "`.env` 里的密钥怎么办？" | `.env` 不在 GitHub 里，`git pull` 不会动它，安全 |
+| "我不会 git pull 怎么办？" | 在服务器 SSH 终端输入 `cd /var/www/neikongai && git pull` 就好了 |
+
+---
+
 ## 总结：一句话记住核心原则
 
 > **代码** 放 GitHub，用 `git pull` 更新到服务器。  
 > **密钥** 只放服务器的 `.env` 文件，永远不碰 GitHub。  
 > **轮换密钥** = 改 DashScope 控制台 + 改 PostgreSQL + 改服务器 `.env` + 重启服务。  
-> 整个过程完全不需要改 GitHub 上的任何代码。
+> **整个过程完全不需要改 GitHub 上的任何代码。**
 
 ---
 
