@@ -1,7 +1,7 @@
 """
-智能分块服务
-根据不同的法律结构采用不同的分块策略
-确保每个向量块大小适中、语义完整
+智能分块服务（行业准则版）
+根据不同的文档结构采用不同的分块策略
+当前准则文档统一采用：一条条款 = 一个 chunk
 """
 
 from typing import Dict, List, Tuple
@@ -9,13 +9,13 @@ import re
 
 
 class ChunkingService:
-    """智能分块服务：将法律文档分块以便向量化"""
+    """分块服务（行业准则版）：准则条款统一一条一块，附件与无结构文档按原逻辑处理"""
     
     def __init__(self):
         self.min_chunk_size = 200      # 最小分块大小（字符）
         self.max_chunk_size = 1000     # 最大分块大小（字符）
         self.target_chunk_size = 500   # 目标分块大小（字符）
-        self.articles_per_chunk = 3    # 每个分块的目标条数
+        self.articles_per_chunk = 3    # 每个分块的目标条数（保留供参考，当前未使用）
     
     def chunk_document(self, text: str, structure: Dict) -> List[Dict]:
         """
@@ -109,12 +109,8 @@ class ChunkingService:
         references: Dict
     ) -> List[Dict]:
         """
-        策略1：有章节结构的法律
-        原则：
-        1. 同章节的条可以组合
-        2. 不同章节的条��能混合
-        3. 每个块3-5条，或单条>800字独立成块
-        4. 孤儿条款<200字向前合并
+        策略1：有章节结构的准则文档
+        规则：一条条款 = 一个向量块，按章节归属保留元数据
         
         Args:
             articles: 条文列表
@@ -227,95 +223,6 @@ class ChunkingService:
                 references,
                 start_index + idx
             ))
-        return chunks
-        
-        chunks = []
-        current_group = []
-        current_size = 0
-        
-        for i, article in enumerate(articles):
-            article_content = article['content']
-            article_size = len(article_content)
-            
-            # 判断：单条过长（>800字）独立成块
-            if article_size > 800:
-                # 先保存当前组
-                if current_group:
-                    chunks.append(self._create_chunk(
-                        current_group, chapter_num, chapter_title,
-                        section_num, section_title, references,
-                        start_index + len(chunks)
-                    ))
-                    current_group = []
-                    current_size = 0
-                
-                # 单条独立成块
-                chunks.append(self._create_chunk(
-                    [article], chapter_num, chapter_title,
-                    section_num, section_title, references,
-                    start_index + len(chunks)
-                ))
-                continue
-            
-            # 判断：加入当前组是否超过最大值
-            if current_size + article_size > self.max_chunk_size and current_group:
-                # 当前组已满，保存并开新组
-                chunks.append(self._create_chunk(
-                    current_group, chapter_num, chapter_title,
-                    section_num, section_title, references,
-                    start_index + len(chunks)
-                ))
-                current_group = [article]
-                current_size = article_size
-            else:
-                # 加入当前组
-                current_group.append(article)
-                current_size += article_size
-            
-            # 判断：当前组已达到目标条数且大小合适
-            if (len(current_group) >= self.articles_per_chunk and 
-                current_size >= self.target_chunk_size):
-                chunks.append(self._create_chunk(
-                    current_group, chapter_num, chapter_title,
-                    section_num, section_title, references,
-                    start_index + len(chunks)
-                ))
-                current_group = []
-                current_size = 0
-        
-        # 处理最后一组（可能是孤儿条款）
-        if current_group:
-            # 如果最后一组太小且前面有块，尝试合并到前一块
-            if current_size < self.min_chunk_size and chunks:
-                last_chunk = chunks[-1]
-                last_chunk_size = len(last_chunk['chunk_text'])
-                
-                # 合并后不超过最大值
-                if last_chunk_size + current_size <= self.max_chunk_size:
-                    # 合并到前一块
-                    merged_articles = self._get_articles_from_chunk(last_chunk, articles)
-                    merged_articles.extend(current_group)
-                    
-                    chunks[-1] = self._create_chunk(
-                        merged_articles, chapter_num, chapter_title,
-                        section_num, section_title, references,
-                        start_index + len(chunks) - 1
-                    )
-                else:
-                    # 无法合并，独立成块
-                    chunks.append(self._create_chunk(
-                        current_group, chapter_num, chapter_title,
-                        section_num, section_title, references,
-                        start_index + len(chunks)
-                    ))
-            else:
-                # 独立成块
-                chunks.append(self._create_chunk(
-                    current_group, chapter_num, chapter_title,
-                    section_num, section_title, references,
-                    start_index + len(chunks)
-                ))
-        
         return chunks
     
     def _create_chunk(
@@ -451,8 +358,8 @@ class ChunkingService:
     
     def chunk_without_chapters(self, articles: List[Dict], references: Dict) -> List[Dict]:
         """
-        策略2：无章节结构的法律（只有条）
-        按语义相关性分组，每3-5条一组
+        策略2：无章节结构的准则文档（只有条）
+        规则：一条条款 = 一个向量块
         
         Args:
             articles: 条文列表
