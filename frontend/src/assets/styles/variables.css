@@ -1,0 +1,37 @@
+/* Google Fonts 导入 - 必须放在最前面 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@700;800&display=swap');
+
+/* 设计系统 - 基于 GitHub 仓库的 ComplianceAI 风格 */
+:root {
+  /* 主色调 */
+  --primary-color: #6c63ff;
+  --primary-dark: #5a52d5;
+  --primary-light: #8b84ff;
+  
+  /* 中性色 */
+  --dark-bg: #242740;
+  --dark-bg-secondary: #1c1f32;
+  --text-light: rgba(255, 255, 255, 0.9);
+  --text-muted: rgba(255, 255, 255, 0.6);
+  
+  /* 功能色 */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+  
+  /* 字体 */
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Playfair Display', serif;
+  
+  /* 阴影 */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+body {
+  font-family: var(--font-primary);
+  margin: 0;
+  padding: 0;
+}

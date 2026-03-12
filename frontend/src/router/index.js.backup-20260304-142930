@@ -1,0 +1,128 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+
+const routes = [
+  // ========== 公开区域 ==========
+  {
+    path: '/',
+    name: 'Home',
+    component: () => import('@/views/public/HomePage.vue'),
+    meta: { title: '内控AI - 智能法律合规助手', public: true }
+  },
+  
+  // ========== 认证区域 ==========
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/auth/LoginPage.vue'),
+    meta: { title: '登录 - 内控AI', public: true }
+  },
+  {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/auth/RegisterPage.vue'),
+    meta: { title: '注册 - 内控AI', public: true }
+  },
+  
+  // ========== 企业用户后台 ==========
+  {
+    path: '/company',
+    component: () => import('@/layouts/CompanyLayout.vue'),
+    meta: { requireAuth: true, allowRoles: ['COMPANY_USER', 'COMPANY_ADMIN'] },
+    children: [
+      {
+        path: '',
+        redirect: '/company/chat'
+      },
+      {
+        path: 'chat',
+        name: 'CompanyChat',
+        component: () => import('@/views/company/ChatPage.vue'),
+        meta: { title: 'AI法律问答 - 内控AI' }
+      },
+      {
+        path: 'history',
+        name: 'CompanyHistory',
+        component: () => import('@/views/company/HistoryPage.vue'),
+        meta: { title: '查询历史 - 内控AI' }
+      }
+    ]
+  },
+  
+  // ========== 超级管理员后台 ==========
+  {
+    path: '/admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { requireAuth: true, allowRoles: ['SUPER_ADMIN'] },
+    children: [
+      {
+        path: '',
+        redirect: '/admin/laws'
+      },
+      {
+        path: 'laws',
+        name: 'AdminLaws',
+        component: () => import('@/views/admin/LawsList.vue'),
+        meta: { title: '法律文档管理 - 内控AI' }
+      },
+      {
+        path: 'laws/:id',
+        name: 'AdminLawDetail',
+        component: () => import('@/views/admin/LawDetail.vue'),
+        meta: { title: '文档详情 - 内控AI' }
+      },
+      {
+        path: 'companies',
+        name: 'AdminCompanies',
+        component: () => import('@/views/admin/CompaniesPage.vue'),
+        meta: { title: '企业管理 - 内控AI' }
+      },
+      {
+        path: 'users',
+        name: 'AdminUsers',
+        component: () => import('@/views/admin/UsersPage.vue'),
+        meta: { title: '用户管理 - 内控AI' }
+      }
+    ]
+  }
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+})
+
+// 全局路由守卫
+router.beforeEach((to, from, next) => {
+  const userStore = useUserStore()
+  
+  // 设置页面标题
+  document.title = to.meta.title || '内控AI'
+  
+  // 公开页面直接通过
+  if (to.meta.public) {
+    return next()
+  }
+  
+  // 需要认证的页面
+  if (to.meta.requireAuth) {
+    if (!userStore.isLoggedIn) {
+      return next({
+        path: '/login',
+        query: { redirect: to.fullPath }
+      })
+    }
+    
+    // 检查角色权限
+    if (to.meta.allowRoles) {
+      const userRole = userStore.currentUser?.role
+      if (!to.meta.allowRoles.includes(userRole)) {
+        return next('/') // 无权限返回首页
+      }
+    }
+  }
+  
+  next()
+})
+
+export default router

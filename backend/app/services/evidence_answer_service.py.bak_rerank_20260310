@@ -1,0 +1,93 @@
+from app.services.embedding_service import embedding_service
+from app.services.query_understanding_service import query_understanding_service
+from app.core.database import get_db_connection
+from app.ai_service import ai_service
+
+
+class EvidenceAnswerService:
+    """证据驱动回答服务"""
+
+    def answer_question(self, user_query: str):
+        # 1. 用户问题理解
+        query_profile = query_understanding_service.understand_query(user_query)
+        retrieval_query = query_profile.get("retrieval_query") or user_query
+
+        # 2. 向量化查询
+        query_embedding = embedding_service.get_single_embedding(retrieval_query)
+
+        # 3. 检索最相关法条
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT
+                    lc.id,
+                    lc.chunk_text,
+                    lc.article_start,
+                    ld.title,
+                    lc.keywords,
+                    1 - (lc.embedding <=> %s::vector) as similarity
+                FROM legal_chunks lc
+                JOIN legal_documents ld ON lc.document_id = ld.id
+                WHERE ld.status = 'active'
+                ORDER BY lc.embedding <=> %s::vector
+                LIMIT 3
+            """, (query_embedding, query_embedding))
+
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+        evidence_blocks = []
+        evidence_text_parts = []
+
+        for row in rows:
+            evidence_blocks.append({
+                "chunk_id": row[0],
+                "law_title": row[3],
+                "article_start": row[2],
+                "keywords": row[4] or [],
+                "similarity": float(row[5]) if row[5] is not None else 0.0,
+                "chunk_text": row[1],
+            })
+            evidence_text_parts.append(f"{row[3]} {row[2]}：{row[1]}")
+
+        evidence_text = "\n\n".join(evidence_text_parts)
+
+        if not evidence_text.strip():
+            return {
+                "question": user_query,
+                "answer": "未检索到可用法律依据，暂时无法生成合规回答。",
+                "evidence": [],
+                "query_profile": query_profile
+            }
+
+        prompt = f"""你是企业依法合规助手。
+
+用户问题：
+{user_query}
+
+系统已检索到以下法律依据：
+{evidence_text}
+
+请严格遵守以下要求：
+1. 只能基于以上法律依据回答，不得编造未提供的法律内容。
+2. 回答必须明确引用法律名称和条文编号。
+3. 先给结论，再给依据。
+4. 如果现有证据不足以支持完整结论，必须明确说明“根据当前检索到的法条，证据仍有限”。
+5. 语言保持专业、简洁、清晰。
+"""
+
+        answer = ai_service.chat([], prompt)
+
+        return {
+            "question": user_query,
+            "answer": answer,
+            "evidence": evidence_blocks,
+            "query_profile": query_profile
+        }
+
+
+evidence_answer_service = EvidenceAnswerService()

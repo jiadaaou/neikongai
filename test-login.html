@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>NeikongAI 登录测试</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; }
+        input, button { padding: 10px; margin: 5px 0; width: 100%; }
+        button { cursor: pointer; background: #4CAF50; color: white; border: none; }
+        button:hover { background: #45a049; }
+        #result { margin-top: 20px; padding: 15px; background: #f5f5f5; white-space: pre-wrap; font-family: monospace; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>🔐 NeikongAI 登录测试</h1>
+    
+    <input id="username" placeholder="用户名" value="testuser456">
+    <input id="password" type="password" placeholder="密码" value="Admin123456">
+    <button onclick="testLogin()">登录测试</button>
+    <button onclick="testAdmin()">测试管理后台</button>
+    
+    <div id="result">点击按钮开始测试...</div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        
+        async function testLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const result = document.getElementById('result');
+            
+            result.innerHTML = '⏳ 登录中...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `username=${username}&password=${password}`
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    localStorage.setItem('token', data.access_token);
+                    
+                    // 解码 Token
+                    const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+                    
+                    result.innerHTML = `<span class="success">✅ 登录成功！</span>\n\n` +
+                        `Token 内容:\n${JSON.stringify(payload, null, 2)}\n\n` +
+                        `Token 已保存到 LocalStorage\n\n` +
+                        `现在可以点击"测试管理后台"按钮`;
+                } else {
+                    result.innerHTML = `<span class="error">❌ 登录失败 (HTTP ${response.status})</span>\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (err) {
+                result.innerHTML = `<span class="error">❌ 请求失败</span>\n${err.message}\n\n请检查:\n1. 后端服务是否运行\n2. CORS 配置是否正确`;
+            }
+        }
+        
+        async function testAdmin() {
+            const result = document.getElementById('result');
+            const token = localStorage.getItem('token');
+            
+            if (!token) {
+                result.innerHTML = '<span class="error">❌ 请先登录</span>';
+                return;
+            }
+            
+            result.innerHTML = '⏳ 访问管理后台...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/admin/laws?page=1&per_page=3`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    result.innerHTML = `<span class="success">✅ 管理后台访问成功！</span>\n\n` +
+                        `返回 ${data.items ? data.items.length : 0} 条法律文档\n\n` +
+                        `完整数据:\n${JSON.stringify(data, null, 2).substring(0, 1000)}...`;
+                } else {
+                    result.innerHTML = `<span class="error">❌ 访问被拒绝 (HTTP ${response.status})</span>\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (err) {
+                result.innerHTML = `<span class="error">❌ 请求失败</span>\n${err.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

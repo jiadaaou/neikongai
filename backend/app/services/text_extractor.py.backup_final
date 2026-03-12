@@ -1,0 +1,283 @@
+"""
+文本提取服务
+支持 PDF、Word、TXT 格式的文本提取
+"""
+
+import PyPDF2
+import pdfplumber
+import docx
+import chardet
+import os
+from typing import Dict, List
+
+
+class TextExtractor:
+    """文本提取器：从各种文档格式中提取文本"""
+    
+    def __init__(self):
+        self.supported_formats = ['.pdf', '.docx', '.doc', '.txt']
+    
+    def extract(self, file_path: str) -> Dict:
+        """
+        统一的提取接口，自动识别文件类型
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            {
+                'text': '完整文本',
+                'pages': [{'page_num': 1, 'text': '...'}],
+                'metadata': {
+                    'total_pages': 100,
+                    'format': 'pdf',
+                    'file_size': 1024000
+                }
+            }
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+        
+        # 获取文件扩展名
+        _, ext = os.path.splitext(file_path)
+        ext = ext.lower()
+        
+        if ext not in self.supported_formats:
+            raise ValueError(f"不支持的文件格式: {ext}. 支持的格式: {self.supported_formats}")
+        
+        # 根据文件类型调用对应的提取方法
+        if ext == '.pdf':
+            return self.extract_from_pdf(file_path)
+        elif ext in ['.docx', '.doc']:
+            return self.extract_from_word(file_path)
+        elif ext == '.txt':
+            return self.extract_from_txt(file_path)
+        else:
+            raise ValueError(f"未实现的文件格式处理: {ext}")
+    
+    def extract_from_pdf(self, file_path: str) -> Dict:
+        """
+        从 PDF 提取文本（使用 pdfplumber，保留页码和布局）
+        
+        Args:
+            file_path: PDF 文件路径
+            
+        Returns:
+            包含文本、页码信息的字典
+        """
+        result = {
+            'text': '',
+            'pages': [],
+            'metadata': {
+                'format': 'pdf',
+                'file_size': os.path.getsize(file_path)
+            }
+        }
+        
+        try:
+            # 使用 pdfplumber（比 PyPDF2 更强大）
+            with pdfplumber.open(file_path) as pdf:
+                result['metadata']['total_pages'] = len(pdf.pages)
+                
+                full_text_parts = []
+                
+                for page_num, page in enumerate(pdf.pages, start=1):
+                    # 提取页面文本
+                    page_text = page.extract_text()
+                    
+                    if page_text:
+                        # 清理文本（去除多余空白）
+                        page_text = self._clean_text(page_text)
+                        
+                        result['pages'].append({
+                            'page_num': page_num,
+                            'text': page_text,
+                            'char_start': len(''.join(full_text_parts)),
+                            'char_end': len(''.join(full_text_parts)) + len(page_text)
+                        })
+                        
+                        full_text_parts.append(page_text)
+                
+                result['text'] = '\n\n'.join(full_text_parts)
+                
+                print(f"✅ PDF 提取成功: {len(pdf.pages)} 页, {len(result['text'])} 字符")
+                
+        except Exception as e:
+            # 如果 pdfplumber 失败，尝试 PyPDF2
+            print(f"⚠️  pdfplumber 提取失败，尝试 PyPDF2: {e}")
+            return self._extract_from_pdf_pypdf2(file_path)
+        
+        return result
+    
+    def _extract_from_pdf_pypdf2(self, file_path: str) -> Dict:
+        """备用方案：使用 PyPDF2 提取 PDF"""
+        result = {
+            'text': '',
+            'pages': [],
+            'metadata': {
+                'format': 'pdf',
+                'file_size': os.path.getsize(file_path)
+            }
+        }
+        
+        with open(file_path, 'rb') as f:
+            pdf_reader = PyPDF2.PdfReader(f)
+            result['metadata']['total_pages'] = len(pdf_reader.pages)
+            
+            full_text_parts = []
+            
+            for page_num, page in enumerate(pdf_reader.pages, start=1):
+                page_text = page.extract_text()
+                
+                if page_text:
+                    page_text = self._clean_text(page_text)
+                    
+                    result['pages'].append({
+                        'page_num': page_num,
+                        'text': page_text
+                    })
+                    
+                    full_text_parts.append(page_text)
+            
+            result['text'] = '\n\n'.join(full_text_parts)
+            
+            print(f"✅ PDF 提取成功(PyPDF2): {len(pdf_reader.pages)} 页")
+        
+        return result
+    
+    def extract_from_word(self, file_path: str) -> Dict:
+        """
+        从 Word 文档提取文本
+        
+        Args:
+            file_path: Word 文件路径
+            
+        Returns:
+            包含文本的字典
+        """
+        result = {
+            'text': '',
+            'pages': [],
+            'metadata': {
+                'format': 'docx',
+                'file_size': os.path.getsize(file_path)
+            }
+        }
+        
+        try:
+            doc = docx.Document(file_path)
+            
+            # Word 没有"页"的概念，按段落提取
+            paragraphs = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    paragraphs.append(para.text.strip())
+            
+            result['text'] = '\n\n'.join(paragraphs)
+            result['metadata']['total_paragraphs'] = len(paragraphs)
+            
+            # 模拟页面（每10个段落算一页）
+            for i in range(0, len(paragraphs), 10):
+                page_paras = paragraphs[i:i+10]
+                result['pages'].append({
+                    'page_num': i // 10 + 1,
+                    'text': '\n\n'.join(page_paras)
+                })
+            
+            print(f"✅ Word 提取成功: {len(paragraphs)} 段落, {len(result['text'])} 字符")
+            
+        except Exception as e:
+            raise Exception(f"Word 文档提取失败: {str(e)}")
+        
+        return result
+    
+    def extract_from_txt(self, file_path: str) -> Dict:
+        """
+        从 TXT 文件读取文本（自动检测编码）
+        
+        Args:
+            file_path: TXT 文件路径
+            
+        Returns:
+            包含文本的字典
+        """
+        result = {
+            'text': '',
+            'pages': [],
+            'metadata': {
+                'format': 'txt',
+                'file_size': os.path.getsize(file_path)
+            }
+        }
+        
+        # 检测文件编码
+        with open(file_path, 'rb') as f:
+            raw_data = f.read()
+            detected = chardet.detect(raw_data)
+            encoding = detected['encoding']
+            confidence = detected['confidence']
+            
+            print(f"🔍 检测到编码: {encoding} (置信度: {confidence:.2%})")
+        
+        # 读取文本
+        try:
+            with open(file_path, 'r', encoding=encoding) as f:
+                text = f.read()
+            
+            result['text'] = self._clean_text(text)
+            result['metadata']['encoding'] = encoding
+            result['metadata']['encoding_confidence'] = confidence
+            
+            # 按空行分段
+            paragraphs = [p.strip() for p in result['text'].split('\n\n') if p.strip()]
+            
+            # 模拟页面
+            for i in range(0, len(paragraphs), 10):
+                page_paras = paragraphs[i:i+10]
+                result['pages'].append({
+                    'page_num': i // 10 + 1,
+                    'text': '\n\n'.join(page_paras)
+                })
+            
+            print(f"✅ TXT 提取成功: {len(paragraphs)} 段落, {len(result['text'])} 字符")
+            
+        except Exception as e:
+            raise Exception(f"TXT 文件读取失败: {str(e)}")
+        
+        return result
+    
+    def _clean_text(self, text: str) -> str:
+        """
+        清理文本：去除多余空白、统一换行
+        
+        Args:
+            text: 原始文本
+            
+        Returns:
+            清理后的文本
+        """
+        if not text:
+            return ''
+        
+        # 替换多个空格为一个
+        import re
+        text = re.sub(r' +', ' ', text)
+        
+        # 替换多个换行为两个（保留段落分隔）
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # 去除首尾空白
+        text = text.strip()
+        
+        return text
+
+
+# 创建全局实例
+text_extractor = TextExtractor()
+
+
+# 测试代码
+if __name__ == '__main__':
+    print("文本提取服务已加载")
+    print(f"支持的格式: {text_extractor.supported_formats}")
+

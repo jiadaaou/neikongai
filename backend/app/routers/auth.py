@@ -1,0 +1,169 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, EmailStr
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+import os
+from app.core.database import get_db_connection
+
+router = APIRouter()
+
+# 密码加密
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# JWT 配置
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+# Pydantic 模型
+class UserRegister(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    username: str
+    email: str
+    created_at: datetime
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# 工具函数
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+# 路由
+@router.post("/register", response_model=UserResponse)
+async def register(user: UserRegister):
+    """用户注册"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # 检查用户名是否存在
+        cursor.execute("SELECT id FROM users WHERE username = %s", (user.username,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="用户名已存在")
+        
+        # 检查邮箱是否存在
+        cursor.execute("SELECT id FROM users WHERE email = %s", (user.email,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="邮箱已被注册")
+        
+        # 创建用户
+        hashed_pwd = hash_password(user.password)
+        cursor.execute(
+            """
+            INSERT INTO users (username, email, hashed_password)
+            VALUES (%s, %s, %s)
+            RETURNING id, username, email, created_at
+            """,
+            (user.username, user.email, hashed_pwd)
+        )
+        result = cursor.fetchone()
+        conn.commit()
+        
+        return {
+            "id": str(result[0]),
+            "username": result[1],
+            "email": result[2],
+            "created_at": result[3]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"注册失败: {str(e)}")
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """用户登录"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # 查询用户
+        cursor.execute(
+            "SELECT id, username, hashed_password, role FROM users WHERE username = %s",
+            (form_data.username,)
+        )
+        user = cursor.fetchone()
+        
+        if not user or not verify_password(form_data.password, user[2]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="用户名或密码错误",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # 创建 token
+        access_token = create_access_token(data={
+            "sub": user[1],  # username
+            "user_id": str(user[0]),  # id
+            "role": user[3] if len(user) > 3 and user[3] else "COMPANY_USER"  # role
+        })
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+    finally:
+        cursor.close()
+        conn.close()
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    """获取当前用户信息"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "SELECT id, username, email, created_at FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+        
+        if user is None:
+            raise credentials_exception
+        
+        return {
+            "id": str(user[0]),
+            "username": user[1],
+            "email": user[2],
+            "created_at": user[3]
+        }
+    finally:
+        cursor.close()
+        conn.close()

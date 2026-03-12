@@ -1,0 +1,496 @@
+"""
+文档处理协调器
+协调所有服务，完成从文件到向量知识库的完整流程
+"""
+
+from app.services.text_extractor import text_extractor
+from app.services.structure_parser import structure_parser
+from app.services.ai_structure_analyzer import ai_structure_analyzer
+from app.services.chunking_service import chunking_service
+from app.services.embedding_service import embedding_service
+from app.services.law_ai_analyzer import law_ai_analyzer
+from app.core.database import get_db_connection
+import time
+import hashlib
+from typing import Dict
+import json
+
+
+class DocumentProcessor:
+    """文档处理协调器：完整的文档处理流程"""
+
+    def __init__(self):
+        self.text_extractor = text_extractor
+        self.structure_parser = structure_parser
+        self.chunking_service = chunking_service
+        self.embedding_service = embedding_service
+        self.law_ai_analyzer = law_ai_analyzer
+
+        print("✅ 文档处理协调器初始化成功")
+
+    async def process_document(self, document_id: int, file_path: str) -> Dict:
+        """
+        完整的文档处理流程
+
+        流程：
+        1. 提取文本
+        2. 识别结构
+        3. 智能分块
+        4. 向量化
+        5. 存入数据库
+        6. 记录日志
+        """
+        start_time = time.time()
+
+        print("\n" + "=" * 80)
+        print(f"📄 开始处理文档 ID: {document_id}")
+        print("=" * 80)
+
+        try:
+            # ===== 步骤1：提取文本 =====
+            step_start = time.time()
+            self._log_step(document_id, "extract_text", "processing")
+
+            print("\n【步骤 1/5】提取文本...")
+            text_data = self.text_extractor.extract(file_path)
+            full_text = text_data['text']
+
+            step_time = int((time.time() - step_start) * 1000)
+            self._log_step(document_id, "extract_text", "success", {
+                'text_length': len(full_text),
+                'pages': text_data['metadata'].get('total_pages', 0)
+            }, step_time)
+
+            print(f"✅ 文本提取完成：{len(full_text)} 字符, {step_time}ms")
+
+            self._update_document_full_text(document_id, full_text)
+
+            # ===== 步骤2：识别结构 =====
+            step_start = time.time()
+            self._log_step(document_id, "parse_structure", "processing")
+
+            print("\n【步骤 2/5】识别结构...")
+            structure = self.structure_parser.parse_structure(full_text, use_ai=False)
+
+            step_time = int((time.time() - step_start) * 1000)
+            self._log_step(document_id, "parse_structure", "success", {
+                'chapters': len(structure['chapters']),
+                'sections': len(structure['sections']),
+                'articles': len(structure['articles']),
+                'references': len(structure['references'])
+            }, step_time)
+
+            print(f"✅ 结构识别完成：{step_time}ms")
+
+            self._update_document_structure(document_id, structure)
+
+            # ===== 步骤2.5：AI 转换附加内容为自然语言 =====
+            if structure.get('attachments'):
+                step_start = time.time()
+                print(f"\n【步骤 2.5/5】AI 转换 {len(structure['attachments'])} 个附加内容为自然语言...")
+
+                for att in structure['attachments']:
+                    line_num = att.get('line_num')
+                    if line_num is not None:
+                        lines = full_text.split('\n')
+
+                        next_att_line = None
+                        for next_att in structure['attachments']:
+                            next_line = next_att.get('line_num')
+                            if next_line and next_line > line_num:
+                                if next_att_line is None or next_line < next_att_line:
+                                    next_att_line = next_line
+
+                        att_text = '\n'.join(lines[line_num:next_att_line]) if next_att_line else '\n'.join(lines[line_num:])
+
+                        try:
+                            natural_text = ai_structure_analyzer.convert_attachment_to_natural_language(
+                                att_text,
+                                att.get('type', '附加内容'),
+                                att.get('content_type', '表格')
+                            )
+                            att['natural_text'] = natural_text
+                            print(f"   ✅ {att.get('type', '附加内容')}: {len(att_text)} → {len(natural_text)} 字符")
+                        except Exception as e:
+                            print(f"   ⚠️  转换失败: {e}")
+                            att['natural_text'] = att_text
+
+                step_time = int((time.time() - step_start) * 1000)
+                print(f"✅ AI 转换完成: {step_time}ms")
+
+            # ===== 步骤3：智能分块 =====
+            step_start = time.time()
+            self._log_step(document_id, "chunk", "processing")
+
+            print("\n【步骤 3/5】智能分块...")
+            chunks = self.chunking_service.chunk_document(full_text, structure)
+
+            seen_texts = {}
+            deduped_chunks = []
+            original_count = len(chunks)
+            for chunk in chunks:
+                text_key = chunk.get('chunk_text', '')
+                if text_key not in seen_texts:
+                    seen_texts[text_key] = True
+                    deduped_chunks.append(chunk)
+            chunks = deduped_chunks
+            if original_count > len(chunks):
+                print(f"   🔍 去重: {original_count} 个分块 → {len(chunks)} 个分块（移除 {original_count - len(chunks)} 个重复）")
+
+            print(f"   🔑 提取关键词...")
+            try:
+                extracted_count = 0
+                for chunk in chunks:
+                    try:
+                        keywords_data = ai_structure_analyzer.extract_keywords_for_chunk(chunk)
+                        chunk['keywords'] = keywords_data['keywords']
+                        chunk['articles_detail'] = keywords_data['articles_detail']
+                        chunk['articles_count'] = keywords_data['articles_count']
+                        extracted_count += 1
+                    except Exception as e:
+                        print(f"      ⚠️  分块 {chunk.get('chunk_index')} 关键词提取失败: {e}")
+                        if 'keywords' not in chunk:
+                            chunk['keywords'] = []
+                        chunk['articles_detail'] = None
+                        chunk['articles_count'] = 1
+
+                print(f"   ✅ 关键词提取完成：{extracted_count}/{len(chunks)} 个分块")
+            except Exception as e:
+                print(f"   ⚠️  批量关键词提取失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            step_time = int((time.time() - step_start) * 1000)
+            self._log_step(document_id, "chunk", "success", {
+                'chunks_count': len(chunks)
+            }, step_time)
+
+            print(f"✅ 智能分块完成：{len(chunks)} 个分块, {step_time}ms")
+
+            # ===== 步骤4：向量化 =====
+            step_start = time.time()
+            self._log_step(document_id, "vectorize", "processing")
+
+            print("\n【步骤 4/5】向量化...")
+            chunk_texts = []
+
+            for chunk in chunks:
+                text = chunk.get('chunk_text', '') or ''
+
+                # DashScope Embedding 单条输入长度有限制
+                # 这里保守截断到 1800 字符，避免超长分块导致向量化失败
+                if len(text) > 1800:
+                    print(f"   ⚠️  分块过长，自动截断：{len(text)} -> 1800")
+                    text = text[:1800]
+
+                chunk_texts.append(text)
+
+            embeddings = self.embedding_service.get_embeddings(chunk_texts)
+
+            step_time = int((time.time() - step_start) * 1000)
+            self._log_step(document_id, "vectorize", "success", {
+                'embeddings_count': len(embeddings),
+                'vector_dimension': len(embeddings[0]) if embeddings else 0
+            }, step_time)
+
+            print(f"✅ 向量化完成：{len(embeddings)} 个向量, {step_time}ms")
+
+            # ===== 步骤5：存入数据库 =====
+            step_start = time.time()
+            self._log_step(document_id, "save_to_db", "processing")
+
+            print("\n【步骤 5/5】存入数据库...")
+            self._save_chunks_to_db(document_id, chunks, embeddings)
+
+            step_time = int((time.time() - step_start) * 1000)
+            self._log_step(document_id, "save_to_db", "success", {
+                'chunks_saved': len(chunks)
+            }, step_time)
+
+            print(f"✅ 数据库保存完成：{step_time}ms")
+
+            total_time = int((time.time() - start_time) * 1000)
+            self._update_document_status(document_id, "completed", len(chunks))
+
+            print("\n" + "=" * 80)
+            print(f"🎉 文档处理完成！")
+            print(f"   文档ID: {document_id}")
+            print(f"   分块数: {len(chunks)}")
+            print(f"   总耗时: {total_time}ms ({total_time/1000:.2f}秒)")
+            print("=" * 80)
+
+            return {
+                'success': True,
+                'document_id': document_id,
+                'chunks_count': len(chunks),
+                'processing_time_ms': total_time
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            print(f"\n❌ 处理失败: {error_msg}")
+
+            self._log_step(document_id, "processing", "failed", error_message=error_msg)
+            self._update_document_status(document_id, "failed", 0)
+
+            return {
+                'success': False,
+                'document_id': document_id,
+                'error': error_msg
+            }
+
+    def _log_step(
+        self,
+        document_id: int,
+        step: str,
+        status: str,
+        details: Dict = None,
+        processing_time_ms: int = None,
+        error_message: str = None
+    ):
+        """记录处理步骤日志"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO document_processing_log
+                (document_id, step, status, details, processing_time_ms, error_message)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                document_id,
+                step,
+                status,
+                json.dumps(details) if details else None,
+                processing_time_ms,
+                error_message
+            ))
+            conn.commit()
+        except Exception as e:
+            print(f"   ⚠️  日志记录失败: {e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _update_document_full_text(self, document_id: int, full_text: str):
+        """更新文档的全文内容"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            text_hash = hashlib.sha256(full_text.encode('utf-8')).hexdigest()
+
+            cursor.execute("""
+                UPDATE legal_documents
+                SET full_text = %s,
+                    file_hash = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (full_text, text_hash, document_id))
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _update_document_structure(self, document_id: int, structure: Dict):
+        """更新文档的结构信息"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE legal_documents
+                SET structure_json = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (json.dumps(structure, ensure_ascii=False), document_id))
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _save_chunks_to_db(self, document_id: int, chunks: list, embeddings: list):
+        """保存分块到数据库，并生成 AI 合规单元"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("SELECT title, legal_level FROM legal_documents WHERE id = %s", (document_id,))
+            result = cursor.fetchone()
+            document_title = result[0] if result else ""
+            legal_level = result[1] if result else 1
+
+            cursor.execute("DELETE FROM legal_chunks WHERE document_id = %s", (document_id,))
+
+            ai_units_saved = 0
+
+            for chunk, embedding in zip(chunks, embeddings):
+                chunk_hash = hashlib.sha256(chunk['chunk_text'].encode('utf-8')).hexdigest()
+
+                cursor.execute("""
+                    INSERT INTO legal_chunks (
+                        document_id,
+                        legal_level,
+                        chunk_index,
+                        chunk_text,
+                        chunk_hash,
+                        chunk_type,
+                        chapter_number,
+                        chapter_title,
+                        section_number,
+                        section_title,
+                        article_start,
+                        article_end,
+                        articles_included,
+                        has_references,
+                        reference_articles,
+                        expanded_text,
+                        keywords,
+                        articles_detail,
+                        articles_count,
+                        embedding
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    )
+                    RETURNING id
+                """, (
+                    document_id,
+                    legal_level,
+                    chunk['chunk_index'],
+                    chunk['chunk_text'],
+                    chunk_hash,
+                    chunk.get('chunk_type', 'single_article'),
+                    chunk.get('chapter_number'),
+                    chunk.get('chapter_title'),
+                    chunk.get('section_number'),
+                    chunk.get('section_title'),
+                    chunk.get('article_start'),
+                    chunk.get('article_end'),
+                    chunk.get('articles_included', []),
+                    chunk.get('has_references', False),
+                    chunk.get('reference_articles', []),
+                    chunk.get('expanded_text'),
+                    chunk.get('keywords', []),
+                    json.dumps(chunk.get("articles_detail"), ensure_ascii=False) if chunk.get("articles_detail") else None,
+                    chunk.get("articles_count", 1),
+                    embedding
+                ))
+
+                chunk_id = cursor.fetchone()[0]
+
+                try:
+                    ai_result = self.law_ai_analyzer.analyze_chunk({
+                        "chunk_id": chunk_id,
+                        "document_title": document_title,
+                        "article_start": chunk.get("article_start"),
+                        "chunk_text": chunk.get("chunk_text", "")
+                    })
+
+                    cursor.execute("""
+                        INSERT INTO ai_law_units (
+                            chunk_id,
+                            document_id,
+                            source_article,
+                            subject,
+                            behavior,
+                            obligation,
+                            prohibition,
+                            risk_type,
+                            risk_level,
+                            compliance_action,
+                            keywords,
+                            analysis_model,
+                            analysis_status,
+                            raw_ai_output,
+                            created_at,
+                            updated_at
+                        ) VALUES (
+                            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                        )
+                        ON CONFLICT (chunk_id) DO UPDATE SET
+                            document_id = EXCLUDED.document_id,
+                            source_article = EXCLUDED.source_article,
+                            subject = EXCLUDED.subject,
+                            behavior = EXCLUDED.behavior,
+                            obligation = EXCLUDED.obligation,
+                            prohibition = EXCLUDED.prohibition,
+                            risk_type = EXCLUDED.risk_type,
+                            risk_level = EXCLUDED.risk_level,
+                            compliance_action = EXCLUDED.compliance_action,
+                            keywords = EXCLUDED.keywords,
+                            analysis_model = EXCLUDED.analysis_model,
+                            analysis_status = EXCLUDED.analysis_status,
+                            raw_ai_output = EXCLUDED.raw_ai_output,
+                            updated_at = NOW()
+                    """, (
+                        chunk_id,
+                        document_id,
+                        ai_result.get("source_article"),
+                        ai_result.get("subject"),
+                        ai_result.get("behavior"),
+                        ai_result.get("obligation"),
+                        ai_result.get("prohibition"),
+                        ai_result.get("risk_type"),
+                        ai_result.get("risk_level"),
+                        ai_result.get("compliance_action"),
+                        ai_result.get("keywords", []),
+                        ai_result.get("analysis_model"),
+                        ai_result.get("analysis_status"),
+                        json.dumps(ai_result.get("raw_ai_output", {}), ensure_ascii=False)
+                    ))
+
+                    cursor.execute(
+                        "UPDATE legal_chunks SET keywords = %s WHERE id = %s",
+                        (ai_result.get("keywords", []), chunk_id)
+                    )
+
+                    ai_units_saved += 1
+                except Exception as e:
+                    print(f"   ⚠️  AI 合规单元写入失败，chunk_id={chunk_id}: {e}")
+
+            conn.commit()
+            print(f"   ✅ 已保存 {len(chunks)} 个分块到数据库")
+            print(f"   ✅ 已保存 {ai_units_saved} 个 AI 合规单元到数据库")
+
+        except Exception as e:
+            conn.rollback()
+            raise Exception(f"数据库保存失败: {str(e)}")
+        finally:
+            cursor.close()
+            conn.close()
+
+    def _update_document_status(self, document_id: int, status: str, chunks_count: int):
+        """更新文档处理状态"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE legal_documents
+                SET processed_status = %s,
+                    chunks_count = %s,
+                    updated_at = NOW()
+                WHERE id = %s
+            """, (status, chunks_count, document_id))
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+
+doc_processor = DocumentProcessor()
+
+
+if __name__ == '__main__':
+    print("\n" + "=" * 60)
+    print("文档处理协调器已加载")
+    print("=" * 60)
+    print("\n服务组件：")
+    print("  ✅ 文本提取服务")
+    print("  ✅ 结构识别服务")
+    print("  ✅ 智能分块服务")
+    print("  ✅ 向量化服务")
+    print("  ✅ 法律 AI 合规单元分析服务")
+    print("\n准备就绪！")
