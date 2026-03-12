@@ -13,7 +13,7 @@ import shutil
 from datetime import datetime
 from typing import Optional
 import asyncio
-from app.routers.auth import get_current_user as require_admin
+from app.routers.auth import require_admin
 
 
 router = APIRouter(prefix="/admin/standards", tags=["Admin-Standards"])
@@ -35,7 +35,7 @@ async def upload_standard(
     legal_level: int = Form(...),
     doc_number: Optional[str] = Form(None),
     effective_date: Optional[str] = Form(None),
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     上传标准文档并自动处理
@@ -169,7 +169,7 @@ async def get_standards(
     search: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     获取标准文档列表（分页、筛选）
@@ -254,7 +254,7 @@ async def get_standards(
 @router.get("/{document_id}")
 async def get_standard_detail(
     document_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """获取标准文档详情"""
     conn = get_db_connection()
@@ -295,7 +295,7 @@ async def get_standard_detail(
 @router.get("/{document_id}/chunks")
 async def get_chunks(
     document_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """获取文档的分块列表"""
     conn = get_db_connection()
@@ -327,7 +327,7 @@ async def get_chunks(
 @router.get("/chunks/{chunk_id}")
 async def get_chunk_detail(
     chunk_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """获取分块详情"""
     conn = get_db_connection()
@@ -376,7 +376,7 @@ async def get_chunk_detail(
 @router.delete("/{document_id}")
 async def delete_standard(
     document_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """删除标准文档（级联删除分块和日志）"""
     conn = get_db_connection()
@@ -415,7 +415,7 @@ async def delete_standard(
 @router.get("/{document_id}/logs")
 async def get_processing_logs(
     document_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """获取文档处理日志"""
     conn = get_db_connection()
@@ -445,7 +445,7 @@ async def get_processing_logs(
 async def test_search(
     query: str = Form(...),
     top_k: int = Form(5),
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     测试向量检索
@@ -501,7 +501,7 @@ async def update_chunk(
     chapter_number: str = Form(None),
     article_start: str = Form(None),
     article_end: str = Form(None),
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     更新分块内容并重新向量化
@@ -574,7 +574,7 @@ async def update_chunk(
 async def reprocess_document(
     document_id: int,
     background_tasks: BackgroundTasks,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     重新处理文档（删除旧分块，重新分块和向量化）
@@ -643,7 +643,7 @@ async def reprocess_document(
 @router.delete("/chunks/{chunk_id}")
 async def delete_chunk(
     chunk_id: int,
-    # current_user: dict = Depends(require_admin)  # 开发阶段禁用
+    current_user: dict = Depends(require_admin)
 ):
     """
     删除分块

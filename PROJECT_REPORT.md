@@ -2,7 +2,7 @@
 
 > **报告生成时间**：2026-03-12  
 > **当前分支**：`copilot/review-project-content`  
-> **项目状态**：开发阶段（认证已禁用，仅供内部调试）
+> **项目状态**：开发阶段（管理 API 认证已恢复，需要管理员 JWT token）
 
 ---
 
@@ -309,20 +309,21 @@ neikongai/
 
 #### 法律文档管理（`/admin/laws` 前缀）
 > **路由文件**：`backend/app/routers/admin_laws.py`（708 行）  
-> ⚠️ **所有端点认证已注释掉**，当前无需任何身份验证
+> ✅ **所有端点已启用认证**，需要携带管理员 JWT token（`super_admin` 或 `company_admin` 角色）
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/admin/laws/upload` | 上传法律文档，异步处理 |
-| GET  | `/admin/laws` | 分页列表（支持筛选：层级/状态/搜索） |
-| GET  | `/admin/laws/{id}` | 文档详情 |
-| GET  | `/admin/laws/{id}/chunks` | 文档分块列表 |
-| GET  | `/admin/laws/chunks/{chunk_id}` | 单个分块详情（含向量维度信息） |
-| DELETE | `/admin/laws/{id}` | 删除文档（级联删除分块+日志+文件） |
-| GET  | `/admin/laws/{id}/logs` | 文档处理日志 |
-| POST | `/admin/laws/test-search` | 混合检索测试 |
-| PUT  | `/admin/laws/chunks/{chunk_id}` | 更新分块文本并重新向量化 |
-| POST | `/admin/laws/{id}/reprocess` | 重新处理文档 |
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/admin/laws/upload` | 上传法律文档，异步处理 | ✅ 管理员 JWT |
+| GET  | `/admin/laws` | 分页列表（支持筛选：层级/状态/搜索） | ✅ 管理员 JWT |
+| GET  | `/admin/laws/{id}` | 文档详情 | ✅ 管理员 JWT |
+| GET  | `/admin/laws/{id}/chunks` | 文档分块列表 | ✅ 管理员 JWT |
+| GET  | `/admin/laws/chunks/{chunk_id}` | 单个分块详情（含向量维度信息） | ✅ 管理员 JWT |
+| DELETE | `/admin/laws/{id}` | 删除文档（级联删除分块+日志+文件） | ✅ 管理员 JWT |
+| GET  | `/admin/laws/{id}/logs` | 文档处理日志 | ✅ 管理员 JWT |
+| POST | `/admin/laws/test-search` | 混合检索测试 | ✅ 管理员 JWT |
+| PUT  | `/admin/laws/chunks/{chunk_id}` | 更新分块文本并重新向量化 | ✅ 管理员 JWT |
+| POST | `/admin/laws/{id}/reprocess` | 重新处理文档 | ✅ 管理员 JWT |
+| DELETE | `/admin/laws/chunks/{chunk_id}` | 删除单个分块 | ✅ 管理员 JWT |
 
 **法律层级定义**：
 | 层级值 | 名称 |
@@ -337,9 +338,9 @@ neikongai/
 
 #### 行业准则管理（`/admin/standards` 前缀）
 > **路由文件**：`backend/app/routers/admin_standards.py`（701 行）  
-> ⚠️ **所有端点认证已注释掉**
+> ✅ **所有端点已启用认证**，需要管理员 JWT token
 
-与法律文档管理接口结构完全对称，路径前缀为 `/admin/standards`。
+与法律文档管理接口结构完全对称，路径前缀为 `/admin/standards`，认证要求相同（`super_admin` 或 `company_admin`）。
 
 ---
 
@@ -591,7 +592,7 @@ ALLOWED_ORIGINS=https://neikongai.com,https://www.neikongai.com
 ### 🔴 待修复（高优先级）
 | 问题 | 风险等级 | 说明 |
 |------|----------|------|
-| 全部管理 API 无认证 | 🔴 高 | `admin_laws.py`、`admin_standards.py` 所有端点的认证依赖均被注释掉 |
+| 全部管理 API 无认证 | ✅ **已修复** | `admin_laws.py`、`admin_standards.py` 所有端点已恢复 `require_admin` 认证 |
 | `/ai/ask` 无认证 | 🔴 高 | 任何人可免费调用通义千问 API，产生费用 |
 | 前端路由守卫无权限验证 | 🔴 高 | 任何人可访问管理后台所有页面 |
 | JWT 有效期配置不一致 | 🟡 中 | 代码中写死 30 分钟，`.env` 配置 1440 分钟，实际生效为 30 分钟 |
@@ -599,13 +600,14 @@ ALLOWED_ORIGINS=https://neikongai.com,https://www.neikongai.com
 | CORS 允许通配符 `*`（开发默认值） | 🟡 中 | 生产环境需要设置 `ALLOWED_ORIGINS` |
 | 文件上传路径写死为 `/var/www/neikongai/` | 🟡 中 | 需配置为环境变量，本地开发路径可能不存在 |
 | 上传文件无大小限制验证 | 🟡 中 | `admin_laws.py` 未检查文件大小 |
-| 删除文档接口无权限验证 | 🔴 高 | 任何人可删除所有法律文档 |
+| 删除文档接口无权限验证 | ✅ **已修复** | 删除接口已恢复 `require_admin` 认证保护 |
 
 ### 🟢 已正确实现的安全措施
 - 密码使用 bcrypt 哈希存储
 - JWT 签名采用 HS256
 - SQL 参数化查询（无 SQL 注入风险）
 - 文件扩展名白名单校验
+- 管理 API 已启用基于角色的认证（`super_admin` / `company_admin`）
 
 ---
 
@@ -635,7 +637,7 @@ ALLOWED_ORIGINS=https://neikongai.com,https://www.neikongai.com
 ## 10. 已知问题与 TODO
 
 ### 🔴 阻塞性问题（上线前必须解决）
-- [ ] **启用认证中间件**：取消 `admin_laws.py`、`admin_standards.py`、`ai_ask.py` 中的注释，恢复认证保护
+- [x] **启用认证中间件**：已在 `auth.py` 新增 `require_admin` 函数，并恢复 `admin_laws.py`、`admin_standards.py` 中 22 处认证保护（`ai_ask.py` 为 AI 问答，普通用户也需使用，不加 admin 限制）
 - [ ] **前端路由守卫**：在 `router/index.js` 中加入基于 `userStore.isLoggedIn` 和 `role` 的权限检查
 - [ ] **轮换所有已泄露的凭据**（见第8节）
 - [ ] **修复 JWT 有效期**：统一为 `ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1440))`
