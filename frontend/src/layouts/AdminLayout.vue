@@ -106,17 +106,19 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-dropdown>
+          <el-dropdown @command="handleCommand">
             <span class="user-info">
               <el-avatar :size="32">
                 <el-icon><User /></el-icon>
               </el-avatar>
-              <span class="username">管理员</span>
+              <span class="username">{{ userStore.currentUser?.username || '管理员' }}</span>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item>个人设置</el-dropdown-item>
-                <el-dropdown-item divided>退出登录</el-dropdown-item>
+                <el-dropdown-item disabled>
+                  角色：{{ roleLabel }}
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -133,7 +135,9 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import {
   Management,
   DataAnalysis,
@@ -149,10 +153,34 @@ import {
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
 const isCollapse = ref(false)
 
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
+
+// 角色显示名称
+const roleLabel = computed(() => {
+  const role = userStore.currentUser?.role
+  if (role === 'super_admin' || role === 'SUPER_ADMIN') return '超级管理员'
+  if (role === 'company_admin' || role === 'COMPANY_ADMIN') return '企业管理员'
+  return role || '管理员'
+})
+
+// 退出登录
+const handleCommand = async (command) => {
+  if (command === 'logout') {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).catch(() => null)
+    userStore.logout()
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  }
+}
 
 // 面包屑
 const breadcrumbs = computed(() => {

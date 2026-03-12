@@ -594,7 +594,7 @@ ALLOWED_ORIGINS=https://neikongai.com,https://www.neikongai.com
 |------|----------|------|
 | 全部管理 API 无认证 | ✅ **已修复** | `admin_laws.py`、`admin_standards.py` 所有端点已恢复 `require_admin` 认证 |
 | `/ai/ask` 无认证 | 🔴 高 | 任何人可免费调用通义千问 API，产生费用 |
-| 前端路由守卫无权限验证 | 🔴 高 | 任何人可访问管理后台所有页面 |
+| 前端路由守卫无权限验证 | ✅ **已修复** | `router/index.js` 已添加基于 `userStore.isLoggedIn` 和角色的守卫；AdminLayout 退出登录功能真实生效 |
 | JWT 有效期配置不一致 | 🟡 中 | 代码中写死 30 分钟，`.env` 配置 1440 分钟，实际生效为 30 分钟 |
 | Token 存储在 localStorage | 🟡 中 | 存在 XSS 攻击风险，建议改为 HttpOnly Cookie |
 | CORS 允许通配符 `*`（开发默认值） | 🟡 中 | 生产环境需要设置 `ALLOWED_ORIGINS` |
@@ -638,7 +638,7 @@ ALLOWED_ORIGINS=https://neikongai.com,https://www.neikongai.com
 
 ### 🔴 阻塞性问题（上线前必须解决）
 - [x] **启用认证中间件**：已在 `auth.py` 新增 `require_admin` 函数，并恢复 `admin_laws.py`、`admin_standards.py` 中 22 处认证保护（`ai_ask.py` 为 AI 问答，普通用户也需使用，不加 admin 限制）
-- [ ] **前端路由守卫**：在 `router/index.js` 中加入基于 `userStore.isLoggedIn` 和 `role` 的权限检查
+- [x] **前端路由守卫**：在 `router/index.js` 中加入基于 `userStore.isLoggedIn` 和 `role` 的权限检查
 - [ ] **轮换所有已泄露的凭据**（见第8节）
 - [ ] **修复 JWT 有效期**：统一为 `ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1440))`
 - [ ] **上传目录改为环境变量**：`UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/var/www/neikongai/uploads/laws")`
