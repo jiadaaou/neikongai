@@ -1,0 +1,419 @@
+# 部署工作流程与密钥管理指南（小白版）
+
+> **适用人群**：对 Git / Linux 服务器操作不熟悉的开发者  
+> **目标**：彻底搞清楚"在哪改代码"、"在哪改密钥"、"两者有什么区别"
+
+---
+
+## 目录
+
+1. [最重要的一个概念：GitHub 存什么，服务器存什么](#1-最重要的一个概念github-存什么服务器存什么)
+2. [你的两个想法分别适用于什么场景](#2-你的两个想法分别适用于什么场景)
+3. [密钥（API Key / 数据库密码）怎么改——完整步骤](#3-密钥api-key--数据库密码怎么改完整步骤)
+4. [代码改动怎么从 GitHub 同步到服务器](#4-代码改动怎么从-github-同步到服务器)
+5. [常见问题 FAQ](#5-常见问题-faq)
+
+---
+
+## 1. 最重要的一个概念：GitHub 存什么，服务器存什么
+
+### 核心原则：密钥永远不放 GitHub
+
+用一张表格来解释两者的分工：
+
+| 内容类型 | 放 GitHub？ | 放服务器？ | 原因 |
+|----------|------------|------------|------|
+| Python 代码（`.py`） | ✅ 是 | ✅ 是（从 GitHub 拉取） | 代码可以公开，没有安全风险 |
+| Vue 代码（`.vue`）  | ✅ 是 | ✅ 是（从 GitHub 拉取） | 同上 |
+| `.env.example`（模板） | ✅ 是 | ✅ 是 | 只是模板，里面的是占位符，没有真实密钥 |
+| `.env`（真实密钥文件） | ❌ **绝对不行** | ✅ 是（手动创建，永不上传） | 包含真实密码，一旦上传到 GitHub（即使私有仓库）就有泄露风险 |
+| `DASHSCOPE_API_KEY` 真实值 | ❌ **绝对不行** | ✅ 写在 `.env` 里 | 同上 |
+| `DB_PASSWORD` 真实值 | ❌ **绝对不行** | ✅ 写在 `.env` 里 | 同上 |
+
+### 用图来理解
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  GitHub 仓库（代码仓库）                                          │
+│  ─────────────────────────────────────────────────────────────  │
+│  ✅  backend/app/main.py           （代码，可以在这里改）         │
+│  ✅  backend/.env.example          （模板，占位符，安全）          │
+│  ❌  backend/.env                  （.gitignore 里已排除）        │
+└─────────────────────────────┬───────────────────────────────────┘
+                              │
+                    git pull（拉取代码）
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  服务器（/var/www/neikongai/）                                   │
+│  ─────────────────────────────────────────────────────────────  │
+│  ✅  backend/app/main.py           （从 GitHub 拉来的代码）       │
+│  ✅  backend/.env.example          （从 GitHub 拉来的模板）        │
+│  ✅  backend/.env                  （服务器上手动创建/编辑，        │
+│                                      里面写真实密钥，只在服务器上） │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**关键点**：
+- `.env` 文件**只存在于服务器**，从来不上传 GitHub
+- 改密钥 = 只改服务器上的 `.env` 文件，GitHub 什么都不用改
+- 改代码 = 在 GitHub 改（或本地改后推送），然后在服务器 `git pull`
+
+---
+
+## 2. 你的两个想法分别适用于什么场景
+
+### 想法 A：在服务器上改代码，然后推回 GitHub
+
+**流程**：
+```
+服务器 → 修改文件 → git add → git commit → git push → GitHub 更新
+```
+
+**适合的场景**：
+- 紧急修复（服务正在运行，不能等）
+- 服务器已有完整开发环境
+
+**缺点**：
+- 容易忘记推回 GitHub，导致代码不同步
+- 服务器直接承担开发工作，有误操作风险
+- **不推荐作为主要工作流**
+
+---
+
+### 想法 B：在 GitHub 上改代码，然后同步到服务器
+
+**流程**：
+```
+GitHub 改代码 → 服务器 git pull → 重启服务
+```
+
+**适合的场景**：
+- ✅ 日常的所有代码改动（推荐！）
+- ✅ 修复 Bug
+- ✅ 新增功能
+
+**注意**：`git pull` 只会更新**代码文件**，不会动 `.env` 文件（因为 `.env` 不在 GitHub 里）
+
+---
+
+### 想法 C（推荐）：代码在 GitHub 改，密钥在服务器的 .env 文件里改
+
+这是正确的工作方式：
+
+```
+┌──────────────────────────┐     ┌──────────────────────────────┐
+│    修改代码                │     │    修改密钥/配置               │
+│    ──────────────────     │     │    ──────────────────────     │
+│  1. 在 GitHub 网页上修改   │     │  1. SSH 登录服务器              │
+│  2. 服务器执行 git pull    │     │  2. 编辑 backend/.env          │
+│  3. 重启服务              │     │  3. 重启服务                   │
+│                          │     │  （完全不需要动 GitHub）         │
+└──────────────────────────┘     └──────────────────────────────┘
+```
+
+---
+
+## 3. 密钥（API Key / 数据库密码）怎么改——完整步骤
+
+### 背景说明
+
+你的项目中有以下密钥需要轮换（之前被意外提交到了 Git 历史里）：
+- `DASHSCOPE_API_KEY`（通义千问 API 密钥）
+- `DB_PASSWORD`（数据库密码）
+- `SECRET_KEY` / `JWT_SECRET_KEY`（应用密钥）
+
+**轮换密钥的含义**：让旧密钥作废，换一个新的密钥，这样即使旧密钥被人看到，也无法使用。
+
+---
+
+### 步骤一：轮换 DASHSCOPE_API_KEY（通义千问）
+
+**在哪里操作**：浏览器，不需要接触服务器或 GitHub
+
+1. 打开 [DashScope 控制台](https://dashscope.console.aliyun.com/)（阿里云）
+2. 登录你的账号
+3. 点击左侧菜单「API-KEY 管理」
+4. 找到旧的 API Key（`sk-a6d6564a22f74098bd7abbaa8bd0786a`），点击**删除**
+5. 点击「创建新的 API-KEY」
+6. **复制新的 API Key**（只会显示一次，请立即保存到安全的地方）
+
+---
+
+### 步骤二：轮换数据库密码
+
+**在哪里操作**：SSH 登录到服务器，在 PostgreSQL 里执行命令
+
+```bash
+# SSH 登录服务器
+ssh root@你的服务器IP
+
+# 连接 PostgreSQL（以下命令在服务器上执行）
+sudo -u postgres psql
+
+# 在 PostgreSQL 里，修改用户密码（把 新密码 换成你要设置的密码）
+ALTER USER neikongai_user WITH PASSWORD '新密码';
+
+# 退出 PostgreSQL
+\q
+```
+
+> **新密码建议格式**：至少16位，包含大写字母+小写字母+数字+特殊字符  
+> 例如：`Nkgai2026!Xp9#mQ`（这只是举例，请自己想一个）
+
+---
+
+### 步骤三：把新密钥写入服务器的 .env 文件
+
+**在哪里操作**：SSH 登录服务器
+
+```bash
+# SSH 登录服务器
+ssh root@你的服务器IP
+
+# 进入项目目录（根据你的实际部署路径修改）
+cd /var/www/neikongai/backend
+
+# 用 nano 编辑器打开 .env 文件
+nano .env
+```
+
+在 nano 编辑器里，找到以下几行并修改（上下键移动，直接编辑）：
+
+```ini
+# 把这行改成新的 API Key
+DASHSCOPE_API_KEY=sk-你的新API_KEY粘贴在这里
+
+# 把这行改成新的数据库密码
+DB_PASSWORD=你在步骤二设置的新密码
+
+# 同时更新 DATABASE_URL 里的密码（找到这行也改掉）
+DATABASE_URL=postgresql://neikongai_user:你的新密码@localhost:5432/neikongai
+
+# 同时为 SECRET_KEY 和 JWT_SECRET_KEY 生成新的随机值
+SECRET_KEY=（见下方生成方法）
+JWT_SECRET_KEY=（见下方生成方法）
+```
+
+**如何生成随机密钥**（在服务器命令行执行）：
+```bash
+# 每次执行都会生成一个不同的随机字符串，复制结果填进 .env
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+**nano 保存方法**：
+- `Ctrl + O`  → 保存文件
+- `Enter`     → 确认文件名
+- `Ctrl + X`  → 退出编辑器
+
+---
+
+### 步骤四：重启后端服务
+
+密钥改完之后，需要重启服务让 Python 程序重新读取 `.env` 文件：
+
+```bash
+# 如果使用 systemd 管理服务（常见方式）
+sudo systemctl restart neikongai-backend
+
+# 如果是用 supervisor 管理
+sudo supervisorctl restart neikongai
+
+# 如果是手动启动的，先找到进程 PID
+ps aux | grep uvicorn
+# 然后 kill 掉旧进程，再重新启动
+kill <PID>
+cd /var/www/neikongai/backend
+source venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+```
+
+---
+
+### 步骤五：验证新密钥生效
+
+```bash
+# 测试 API 是否正常响应
+curl https://admin.neikongai.com/api/health
+
+# 查看后端日志，确认没有错误
+# 如果用 systemd：
+journalctl -u neikongai-backend -n 50 --no-pager
+
+# 如果是文件日志：
+tail -50 /var/www/neikongai/logs/app.log
+```
+
+---
+
+## 4. 代码改动怎么从 GitHub 同步到服务器
+
+### 日常代码更新流程（推荐）
+
+**第一步**：在 GitHub 网页修改代码（或本地修改后 push 到 GitHub）
+
+**第二步**：SSH 登录服务器，拉取代码
+
+```bash
+# SSH 登录
+ssh root@你的服务器IP
+
+# 进入项目目录
+cd /var/www/neikongai
+
+# 拉取最新代码
+git pull origin main
+
+# （如果你的默认分支叫 master，则改成）
+# git pull origin master
+```
+
+**第三步**：根据改动类型，决定需要做什么
+
+| 改动的文件 | 需要额外操作 |
+|----------|------------|
+| 只改了后端 Python 代码 | 重启后端服务（见上方步骤四） |
+| 只改了前端 Vue 代码 | 需要重新构建前端（见下方） |
+| 改了 `requirements.txt` | 需要重新安装依赖（见下方） |
+| 只改了 `.env.example`（模板） | 什么都不需要做（模板不影响运行） |
+
+### 前端代码更新
+
+```bash
+# 进入前端目录
+cd /var/www/neikongai/frontend
+
+# 安装新依赖（如果 package.json 有变化）
+npm install
+
+# 重新构建
+npm run build
+
+# 构建产物会自动输出到 frontend-dist/，nginx 已指向这个目录
+```
+
+### 安装新的 Python 依赖
+
+```bash
+cd /var/www/neikongai/backend
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+---
+
+## 5. 常见问题 FAQ
+
+### Q1：我在 GitHub 上改了 .env.example，服务器上 git pull 之后，.env 里的密钥会变吗？
+
+**不会**。
+
+`.env.example` 是模板文件，`.env` 是真正运行用的配置文件。它们是两个不同的文件：
+- `.env.example`：GitHub 上有，服务器上也有，内容是占位符（`your_password_here`）
+- `.env`：**只在服务器上**，包含真实密钥，即使 `git pull` 也不会被覆盖（因为它不在 Git 里）
+
+---
+
+### Q2：我不小心把 .env 文件 git add 了，怎么办？
+
+**立刻执行以下步骤**，不要 `git push`：
+
+```bash
+# 把 .env 从 git 暂存区移除（不删除文件本身）
+git rm --cached backend/.env
+
+# 确认 .gitignore 里有 .env 这一行
+cat .gitignore | grep ".env"
+
+# 重新提交
+git commit -m "remove .env from tracking"
+```
+
+如果已经 push 到 GitHub 了：立刻轮换所有密钥（按照第3节操作），因为文件已经上传，即使删除历史也可能被人缓存了。
+
+---
+
+### Q3：改了密钥之后，代码需要修改吗？
+
+**不需要**。
+
+代码里读取密钥的方式是：
+```python
+dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
+```
+
+`os.getenv()` 会去读取 `.env` 文件里的值。你只需要修改 `.env` 文件，代码本身完全不需要动。
+
+---
+
+### Q4：想法 A（服务器直接改代码）有什么风险？
+
+主要有两个风险：
+
+1. **代码不同步**：你在服务器上改了代码，但忘记 push 到 GitHub，下次 `git pull` 会把你的改动覆盖掉
+2. **冲突问题**：如果 GitHub 上也有改动，服务器上也有改动，`git pull` 时会产生冲突，需要手动解决
+
+所以建议：**代码改动统一走 GitHub → 服务器**，服务器上只用来：
+- 编辑 `.env` 文件（密钥配置）
+- 执行 `git pull`（拉取最新代码）
+- 重启服务
+
+---
+
+### Q5：我应该用什么顺序来修复安全问题？
+
+按照以下优先级操作：
+
+**第一优先（今天就做）：轮换泄露的密钥**
+- [ ] 在 DashScope 控制台删除旧 API Key，创建新 Key
+- [ ] 修改 PostgreSQL 数据库密码
+- [ ] 更新服务器上的 `.env` 文件
+- [ ] 重启后端服务
+
+**第二优先（本周内）：恢复 API 认证**
+- [ ] 在 `admin_laws.py` 中恢复所有端点的认证（取消注释 `Depends(require_admin)`）
+- [ ] 在前端路由守卫中加入登录检查
+
+**第三优先（下个版本）：代码质量问题**
+- [ ] 修复 `LawDetail.vue` 中重复的 `<el-dialog>` 模板
+- [ ] 实装分块编辑保存功能
+
+---
+
+### Q6：.env 文件的格式是什么？
+
+```ini
+# 井号开头的是注释，不会被读取
+# 格式是：变量名=值（等号两边不要有空格）
+
+DASHSCOPE_API_KEY=sk-你的APIKey
+DB_PASSWORD=你的数据库密码
+
+# 如果值包含特殊字符或空格，用双引号括起来
+SECRET_KEY="abc123!@#$%"
+```
+
+---
+
+### Q7：服务器上怎么查看 .env 文件现在的内容？
+
+```bash
+# 方法1：直接打印（会显示明文密钥，注意周围没有人）
+cat /var/www/neikongai/backend/.env
+
+# 方法2：只列出变量名，不显示值（更安全）
+cat /var/www/neikongai/backend/.env | cut -d= -f1
+```
+
+---
+
+## 总结：一句话记住核心原则
+
+> **代码** 放 GitHub，用 `git pull` 更新到服务器。  
+> **密钥** 只放服务器的 `.env` 文件，永远不碰 GitHub。  
+> **轮换密钥** = 改 DashScope 控制台 + 改 PostgreSQL + 改服务器 `.env` + 重启服务。  
+> 整个过程完全不需要改 GitHub 上的任何代码。
+
+---
+
+*如有疑问，可直接描述你遇到的具体问题，将逐步指导你操作。*
