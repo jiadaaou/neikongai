@@ -1,46 +1,284 @@
 # 小白入门指南：从零启动 NeikongAI
 
-> **适合人群**：第一次运行这个项目、不熟悉 Python / Vue 的开发者  
-> **目标**：让你在本地把前后端全部跑起来，并成功上传第一个法律文档、发出第一条 AI 问答
+---
+
+## ❓ 先看这里：你属于哪种情况？
+
+| 情况 | 描述 | 跳转 |
+|------|------|------|
+| **情况 A（推荐先看）** | 我已经有一台服务器，上面装好了 PostgreSQL、Python、Node.js 等，现在想把 GitHub 上的代码部署上去 | 👉 [情况 A：服务器已就绪，直接部署](#情况-a服务器已就绪直接把代码部署上去) |
+| **情况 B** | 我在自己的电脑上从零开始，什么都还没装 | 👉 [情况 B：从零开始在本地运行](#情况-b从零开始在本地电脑上运行) |
 
 ---
 
-## 目录
+## 💡 先理解一个核心概念：GitHub 和服务器是两回事
 
-1. [你需要准备什么（前提条件）](#1-你需要准备什么前提条件)
-2. [第一步：安装 PostgreSQL 数据库](#2-第一步安装-postgresql-数据库)
-3. [第二步：创建数据库和表结构](#3-第二步创建数据库和表结构)
-4. [第三步：获取通义千问 API Key](#4-第三步获取通义千问-api-key)
-5. [第四步：配置后端环境变量](#5-第四步配置后端环境变量)
-6. [第五步：启动后端服务](#6-第五步启动后端服务)
-7. [第六步：启动前端](#7-第六步启动前端)
-8. [第七步：登录管理后台](#8-第七步登录管理后台)
-9. [第八步：上传第一个法律文档](#9-第八步上传第一个法律文档)
-10. [第九步：测试 AI 问答](#10-第九步测试-ai-问答)
-11. [常见错误和解决方法](#11-常见错误和解决方法)
+很多人刚开始会有一个困惑：**GitHub 上的代码怎么才能跑起来？要在 GitHub 上安装东西吗？**
 
----
+**不是的。** 用一张图来解释：
 
-## 1. 你需要准备什么（前提条件）
+```
+  GitHub（代码仓库）              你的服务器（真正运行的地方）
+  ─────────────────              ──────────────────────────
+  存放代码文件                    实际运行 Python、Node.js
+  你可以在这里修改代码              连接数据库、存文件
+  .py / .vue / .js 等等           处理用户请求
 
-在开始之前，请确认你的电脑上已经安装了以下软件：
+         │   git clone / git pull   │
+         └─────────────────────────┘
+              你用这个命令把代码
+              从 GitHub 复制到服务器
+```
 
-| 软件 | 最低版本 | 检查命令 | 下载地址 |
-|------|---------|---------|---------|
-| Python | 3.10+ | `python3 --version` | https://www.python.org/downloads/ |
-| Node.js | 18+ | `node --version` | https://nodejs.org/ |
-| PostgreSQL | 14+ | `psql --version` | https://www.postgresql.org/download/ |
-| Git | 任意 | `git --version` | https://git-scm.com/ |
-
-> ⚠️ **Windows 用户注意**：建议使用 WSL2（Windows Linux 子系统）或 Git Bash 来运行命令，避免路径问题。
+**关键点：**
+- GitHub 只是**存代码**的地方，不运行任何程序
+- 所有服务（Python、PostgreSQL、Redis 等）都运行在**你的服务器上**
+- 你只需要在**服务器上**执行 `git clone 仓库地址`，把代码拉下来，然后启动就行了
+- `.env` 配置文件（含数据库密码、API Key）**只放在服务器上**，永远不上传 GitHub
 
 ---
 
-## 2. 第一步：安装 PostgreSQL 数据库
+## 情况 A：服务器已就绪，直接把代码部署上去
 
-### 2.1 安装 pgvector 扩展
+> **适合你的情况**：服务器上已有 PostgreSQL、Python 3.10+、Node.js 18+、Nginx、Git
 
-NeikongAI 使用 PostgreSQL 的 **pgvector** 扩展来存储 AI 向量。必须安装。
+### A-0. 通过 SSH 连上你的服务器
+
+```bash
+ssh 你的用户名@你的服务器IP
+```
+
+### A-1. 把代码从 GitHub 拉到服务器
+
+```bash
+# 进入你想放代码的目录（推荐 /var/www/）
+cd /var/www
+
+# 克隆代码（第一次）
+git clone https://github.com/jiadaaou/neikongai.git
+cd neikongai
+```
+
+> 如果你以后改了代码并推送到 GitHub，在服务器上只需要运行 `git pull` 就能更新。
+
+### A-2. 检查 pgvector 扩展是否已安装
+
+NeikongAI 用 PostgreSQL 的 pgvector 扩展来存储 AI 向量。先检查是否已装：
+
+```bash
+sudo -u postgres psql -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+```
+
+- 如果有返回一行记录，说明已安装，跳过安装步骤
+- 如果无输出，需要安装：
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y postgresql-server-dev-$(pg_config --version | grep -oP '\d+' | head -1)
+git clone https://github.com/pgvector/pgvector.git /tmp/pgvector
+cd /tmp/pgvector && make && sudo make install
+sudo -u postgres psql -c "CREATE EXTENSION IF NOT EXISTS vector;"
+```
+
+### A-3. 创建数据库用户和数据库
+
+```bash
+sudo -u postgres psql
+```
+
+在 psql 里执行：
+
+```sql
+-- 创建专用用户（把 your_password_here 换成你自己的强密码）
+CREATE USER neikongai_user WITH PASSWORD 'your_password_here';
+CREATE DATABASE neikongai OWNER neikongai_user;
+GRANT ALL PRIVILEGES ON DATABASE neikongai TO neikongai_user;
+\q
+```
+
+### A-4. 初始化数据库表结构
+
+```bash
+cd /var/www/neikongai
+psql -U neikongai_user -d neikongai -h localhost -f backend/init_db.sql
+```
+
+执行成功后会看到一堆 `CREATE TABLE`，最后一行 `INSERT 0 1` 表示初始管理员账号创建成功。
+
+### A-5. 配置后端环境变量
+
+```bash
+cd /var/www/neikongai/backend
+cp .env.example .env
+nano .env   # 或者用 vim .env
+```
+
+**必须修改的项目：**
+
+```ini
+# 数据库连接（改成你 A-3 步骤中设置的密码）
+DATABASE_URL=postgresql://neikongai_user:your_password_here@localhost:5432/neikongai
+DB_PASSWORD=your_password_here
+
+# 通义千问 API Key（在 https://dashscope.console.aliyun.com/ 获取）
+DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxx
+
+# 安全密钥（随便填一串32位以上的随机字符）
+SECRET_KEY=填入随机字符串至少32位
+JWT_SECRET_KEY=填入另一个随机字符串至少32位
+
+# 你的域名（前端部署后的访问地址）
+ALLOWED_ORIGINS=https://你的域名.com,http://你的服务器IP
+```
+
+### A-6. 安装后端 Python 依赖
+
+```bash
+cd /var/www/neikongai/backend
+
+# 创建虚拟环境（隔离 Python 包，不污染系统）
+python3 -m venv venv
+source venv/bin/activate
+
+# 安装依赖
+pip install -r requirements.txt
+pip install dashscope pdfplumber   # 这两个包未在 requirements.txt 中但必须安装
+
+# 创建文件上传目录
+mkdir -p /var/www/neikongai/uploads/laws
+mkdir -p /var/www/neikongai/uploads/standards
+mkdir -p /var/www/neikongai/storage/chromadb
+```
+
+### A-7. 启动后端服务
+
+**临时测试方式（验证能跑起来）：**
+
+```bash
+cd /var/www/neikongai/backend
+source venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+看到 `🚀 NeikongAI API 启动成功！` 就说明后端正常。
+
+**正式部署方式（用 systemd 让服务自动运行）：**
+
+```bash
+sudo nano /etc/systemd/system/neikongai-backend.service
+```
+
+粘贴以下内容（根据你的实际路径修改）：
+
+```ini
+[Unit]
+Description=NeikongAI Backend
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+WorkingDirectory=/var/www/neikongai/backend
+ExecStart=/var/www/neikongai/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+Environment=PATH=/var/www/neikongai/backend/venv/bin
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable neikongai-backend
+sudo systemctl start neikongai-backend
+sudo systemctl status neikongai-backend   # 查看是否正常运行
+```
+
+### A-8. 构建并部署前端
+
+```bash
+cd /var/www/neikongai/frontend
+
+# 安装依赖（只需要第一次）
+npm install
+
+# 构建生产版本
+npm run build
+# 构建完成后，dist/ 目录就是前端静态文件
+```
+
+### A-9. 配置 Nginx
+
+```bash
+sudo nano /etc/nginx/sites-available/neikongai
+```
+
+粘贴以下配置（把 `你的域名.com` 改成你的实际域名或服务器 IP）：
+
+```nginx
+server {
+    listen 80;
+    server_name 你的域名.com www.你的域名.com;
+
+    # 前端静态文件
+    root /var/www/neikongai/frontend/dist;
+    index index.html;
+
+    # 前端路由（Vue Router history 模式需要）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 后端 API 代理
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # 上传大文件支持
+        client_max_body_size 100M;
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/neikongai /etc/nginx/sites-enabled/
+sudo nginx -t      # 检查配置是否正确
+sudo systemctl reload nginx
+```
+
+### A-10. 验证部署成功
+
+打开浏览器，访问你的域名或服务器 IP：
+
+- 看到登录页面 → ✅ 前端正常
+- 用户名 `admin`，密码 `Admin@123456` 能登录 → ✅ 后端 + 数据库正常
+- 后台能上传文档并看到"处理中" → ✅ 文件系统正常
+- 上传后能向量化成功 → ✅ DashScope API Key 正常
+
+---
+
+## 情况 B：从零开始在本地电脑上运行
+
+> **适合情况**：在自己的开发电脑（Windows / macOS / Linux）上从零开始，什么都还没装
+
+### B-1. 安装必要软件
+
+在开始之前，请先安装以下软件：
+
+| 软件 | 最低版本 | 下载地址 |
+|------|---------|---------|
+| Python | 3.10+ | https://www.python.org/downloads/ |
+| Node.js | 18+ | https://nodejs.org/ |
+| PostgreSQL | 14+ | https://www.postgresql.org/download/ |
+| Git | 任意 | https://git-scm.com/ |
+
+> ⚠️ **Windows 用户注意**：建议使用 WSL2（Windows Linux 子系统）或 Git Bash 来运行命令。
+
+### B-2. 安装 pgvector 扩展
+
+NeikongAI 使用 PostgreSQL 的 **pgvector** 扩展来存储 AI 向量。
 
 **Ubuntu / Debian：**
 ```bash
@@ -55,324 +293,161 @@ make && sudo make install
 brew install pgvector
 ```
 
-**Windows：** 参考 https://github.com/pgvector/pgvector#windows
-
-### 2.2 创建数据库和用户
-
-打开终端，用 PostgreSQL 超级用户登录：
+### B-3. 创建数据库
 
 ```bash
-# Linux / macOS
 sudo -u postgres psql
-
-# Windows（在 pgAdmin 的 Query Tool 里执行也可以）
-psql -U postgres
 ```
 
-在 `psql` 提示符里，依次执行以下 SQL：
-
 ```sql
--- 创建数据库用户（把 your_password_here 改成你自己的密码）
 CREATE USER neikongai_user WITH PASSWORD 'your_password_here';
-
--- 创建数据库
 CREATE DATABASE neikongai OWNER neikongai_user;
-
--- 给用户完整权限
 GRANT ALL PRIVILEGES ON DATABASE neikongai TO neikongai_user;
-
--- 退出 psql
 \q
 ```
 
----
-
-## 3. 第二步：创建数据库和表结构
-
-项目使用了 8 张数据库表。我们已经准备好了一键初始化脚本。
+### B-4. 克隆项目代码
 
 ```bash
-# 进入后端目录
-cd /path/to/neikongai/backend
-
-# 执行初始化脚本（把 your_password_here 改成你上一步设置的密码）
-psql -U neikongai_user -d neikongai -h localhost -f init_db.sql
+git clone https://github.com/jiadaaou/neikongai.git
+cd neikongai
 ```
 
-执行成功后，你会看到类似输出：
-```
-CREATE EXTENSION
-CREATE TABLE
-CREATE TABLE
-CREATE TABLE
-...
-INSERT 0 1          ← 初始管理员账号创建成功
+### B-5. 初始化数据库表结构
+
+```bash
+psql -U neikongai_user -d neikongai -h localhost -f backend/init_db.sql
 ```
 
-**这一步创建了什么：**
-- `users` 表：用户账号
-- `legal_documents` 表：上传的法律 / 行业准则文档
-- `legal_chunks` 表：文档分块（含 1536 维向量字段）
-- `ai_law_units` 表：AI 合规分析结果
-- `document_processing_log` 表：文档处理日志
-- `conversations` / `messages` 表：AI 对话历史
-
-同时创建了初始管理员账号：
-- **用户名**：`admin`
-- **初始密码**：`Admin@123456`
-- **⚠️ 安全提示**：上线前请立即修改密码！
-
----
-
-## 4. 第三步：获取通义千问 API Key
-
-NeikongAI 使用阿里云通义千问（DashScope）提供：
-- **文本嵌入**（把文字变成向量）
-- **大模型生成**（回答用户的合规问题）
-- **AI 文档结构识别**（识别法条结构）
-
-**获取步骤：**
+### B-6. 获取通义千问 API Key
 
 1. 打开 https://dashscope.console.aliyun.com/
-2. 注册 / 登录阿里云账号
-3. 点击左侧菜单 → **API-KEY 管理**
-4. 点击 **创建新的 API-KEY**
-5. 复制生成的 Key（格式类似 `sk-xxxxxxxxxxxxxxxx`）
+2. 登录阿里云 → **API-KEY 管理** → **创建新的 API-KEY**
+3. 复制 Key（格式：`sk-xxxxxxxxxxxxxxxx`）
 
-> 💡 **费用**：通义千问提供免费额度（每月数百万 Token），学习/测试期间通常不需要付费。
-
----
-
-## 5. 第四步：配置后端环境变量
+### B-7. 配置环境变量
 
 ```bash
-# 进入后端目录
-cd /path/to/neikongai/backend
-
-# 复制配置模板
+cd backend
 cp .env.example .env
+# 编辑 .env，填入数据库密码和 DASHSCOPE_API_KEY
 ```
 
-用文本编辑器打开 `.env` 文件，**必须修改**以下几项：
-
-```ini
-# ① 数据库密码（改成第2步你设置的密码）
-DATABASE_URL=postgresql://neikongai_user:your_password_here@localhost:5432/neikongai
-DB_PASSWORD=your_password_here
-
-# ② 通义千问 API Key（改成第3步复制的 Key）
-DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxx
-
-# ③ JWT 安全密钥（改成任意一串随机字符，用于加密登录 token）
-SECRET_KEY=random-string-at-least-32-chars
-JWT_SECRET_KEY=another-random-string-at-least-32-chars
-```
-
-> ❌ **永远不要把 `.env` 文件上传到 GitHub！**（已在 `.gitignore` 中排除）
-
----
-
-## 6. 第五步：启动后端服务
+### B-8. 启动后端
 
 ```bash
-# 进入后端目录
-cd /path/to/neikongai/backend
-
-# 创建 Python 虚拟环境（只需要第一次）
+cd backend
 python3 -m venv venv
-
-# 激活虚拟环境
-source venv/bin/activate       # Linux / macOS
-# venv\Scripts\activate        # Windows
-
-# 安装依赖（只需要第一次，可能需要几分钟）
+source venv/bin/activate
 pip install -r requirements.txt
-pip install dashscope pdfplumber  # 额外依赖
-
-# 创建上传目录
+pip install dashscope pdfplumber
 mkdir -p /var/www/neikongai/uploads/laws
-
-# 启动后端（开发模式，代码改动自动重启）
+mkdir -p /var/www/neikongai/uploads/standards
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-启动成功后，你会看到：
-```
-🚀 NeikongAI API 启动成功！
-📖 API 文档地址: http://localhost:8000/docs
-```
+### B-9. 启动前端
 
-**验证是否成功：** 打开浏览器访问 http://localhost:8000/docs，如果看到 Swagger API 文档页面，说明后端已正常运行。
-
----
-
-## 7. 第六步：启动前端
-
-**新开一个终端窗口**（不要关闭后端），然后：
+新开一个终端窗口：
 
 ```bash
-# 进入前端目录
-cd /path/to/neikongai/frontend
-
-# 安装依赖（只需要第一次，可能需要几分钟）
+cd frontend
 npm install
-
-# 启动前端开发服务器
 npm run dev
 ```
 
-启动成功后，你会看到：
-```
-  VITE vx.x.x  ready in xxx ms
-
-  ➜  Local:   http://localhost:3000/
-```
-
-打开浏览器访问 **http://localhost:3000**，应该能看到跳转到登录页面。
+访问 http://localhost:3000，使用 `admin` / `Admin@123456` 登录。
 
 ---
 
-## 8. 第七步：登录管理后台
+## 两种情况都适用：上传第一个文档 & 测试 AI 问答
 
-在浏览器打开 http://localhost:3000，使用初始管理员账号登录：
+### 上传第一个法律文档
 
-- **用户名**：`admin`
-- **密码**：`Admin@123456`
-
-登录成功后会进入**知识库仪表盘**，这就是管理后台首页。
-
-左侧菜单包含：
-- 📊 **知识库仪表盘** — 统计总览
-- 📋 **法律层级管理** — 按层级查看法律文档
-- 📚 **行业准则管理** — 行业准则文档
-- 📈 **向量监控** — 向量数据库状态
-- ⚖️ **法律文档管理** — 上传和管理法律文件
-- 🏢 **企业管理** — 管理企业账号
-- 👥 **用户管理** — 管理用户账号
-
----
-
-## 9. 第八步：上传第一个法律文档
+登录管理后台后：
 
 1. 点击左侧菜单 **法律文档管理**
-2. 点击页面右上角 **上传法律文档** 按钮
-3. 填写表单：
-   - **法律名称**：例如 `中华人民共和国公司法`
-   - **法律层级**：选择 `法律（4）`
-   - **选择文件**：上传一个 PDF 或 Word 文件（.pdf / .docx）
-4. 点击 **确认上传**
+2. 点击 **上传法律文档** 按钮
+3. 填写表单（法律名称、法律层级），选择 PDF 或 Word 文件
+4. 点击确认
 
-上传后，后端会自动在后台进行：
-1. 📖 **文本提取**（从 PDF/Word 读取文字）
-2. 🔍 **结构识别**（识别章节、条文）
-3. ✂️ **智能分块**（每条条款独立一块）
-4. 🧬 **向量化**（调用通义千问 Embedding API）
-5. 🤖 **AI 合规分析**（识别义务、风险等）
+上传后后端自动处理：📖 提取文本 → 🔍 识别结构 → ✂️ 智能分块 → 🧬 向量化 → 🤖 AI 合规分析  
+处理需要 30 秒到 5 分钟，视文档大小而定。
 
-> ⏱️ 处理时间取决于文档大小和网络速度，一般需要 30 秒到 5 分钟。
+### 测试 AI 问答
 
-点击文档列表里的文档名称，可以查看**处理日志**和**分块详情**。
+注册一个**普通用户账号**（或用 `admin` 账号的企业用户界面），输入问题如：
+- `公司法关于股东会的召开有什么规定？`
+- `违反安全生产法需要承担哪些责任？`
 
 ---
 
-## 10. 第九步：测试 AI 问答
+## 常见错误和解决方法
 
-AI 问答功能需要**企业用户账号**（非管理员账号）。
+### ❌ 数据库连接失败 / `could not connect to server`
 
-### 创建一个企业用户
+检查 PostgreSQL 是否运行，以及 `.env` 里的密码是否正确：
 
-打开 http://localhost:3000/register，注册一个新账号（普通用户）。
-
-### 使用 AI 问答
-
-用新注册的账号登录后，页面会跳转到企业用户界面：
-
-1. 点击 **AI 法律问答**
-2. 在输入框里输入问题，例如：
-   - `公司法关于股东会的召开有什么规定？`
-   - `违反安全生产法需要承担哪些责任？`
-3. 点击发送，等待 AI 回答
-
-AI 会根据你上传的法律文档进行检索，给出有法律依据的回答。
-
----
-
-## 11. 常见错误和解决方法
-
-### ❌ `could not connect to server` / 数据库连接失败
-
-**原因**：PostgreSQL 未启动，或 `.env` 中密码错误。
-
-**解决**：
 ```bash
-# 检查 PostgreSQL 是否运行
-sudo systemctl status postgresql   # Linux
-brew services list                  # macOS
-
-# 启动 PostgreSQL
-sudo systemctl start postgresql    # Linux
-brew services start postgresql     # macOS
+sudo systemctl status postgresql
+sudo systemctl start postgresql   # 如未运行则启动
 ```
-
-检查 `.env` 中 `DB_PASSWORD` 是否和创建用户时的密码一致。
 
 ---
 
 ### ❌ `relation "legal_documents" does not exist`
 
-**原因**：第三步的 `init_db.sql` 没有执行成功。
+`init_db.sql` 没有执行成功。重新执行：
 
-**解决**：重新执行初始化脚本：
 ```bash
-psql -U neikongai_user -d neikongai -h localhost -f backend/init_db.sql
+psql -U neikongai_user -d neikongai -h localhost -f /var/www/neikongai/backend/init_db.sql
 ```
 
 ---
 
 ### ❌ `DASHSCOPE_API_KEY 未设置` / 向量化失败
 
-**原因**：`.env` 文件里没有填写 API Key，或填写了占位符 `your-dashscope-api-key-here`。
-
-**解决**：在 `.env` 中把 `DASHSCOPE_API_KEY` 改为你的真实 Key（`sk-...`）。
+在 `.env` 中把 `DASHSCOPE_API_KEY` 改为你的真实 Key（`sk-...`）。
 
 ---
 
 ### ❌ `No module named 'dashscope'`
 
-**解决**：
 ```bash
-source venv/bin/activate
-pip install dashscope
+source /var/www/neikongai/backend/venv/bin/activate
+pip install dashscope pdfplumber
 ```
 
 ---
 
-### ❌ 前端页面空白 / API 请求失败（Network Error）
+### ❌ 前端页面空白 / API 请求 404
 
-**原因**：后端没有启动，或端口不对。
+检查 Nginx 配置里的 `proxy_pass` 是否指向 `http://127.0.0.1:8000`，以及后端服务是否在运行：
 
-**解决**：
-1. 确认后端在 `http://localhost:8000` 运行（打开该地址应返回 JSON）
-2. 确认前端代理配置正确（`frontend/vite.config.js` 里 proxy 指向 `http://localhost:8000`）
+```bash
+sudo systemctl status neikongai-backend
+curl http://127.0.0.1:8000/   # 应返回 {"message":"欢迎使用 NeikongAI API",...}
+```
 
 ---
 
-### ❌ 登录后显示"权限不足"
+### ❌ 登录后"权限不足"
 
-**原因**：`users` 表里该账号的 `role` 字段不是 `super_admin` 或 `company_admin`。
+在数据库里确认 admin 账号的 role：
 
-**解决**：直接在数据库修改：
-```sql
-UPDATE users SET role = 'super_admin' WHERE username = 'admin';
+```bash
+psql -U neikongai_user -d neikongai -h localhost -c "SELECT username, role FROM users;"
+# 如果 admin 的 role 不是 super_admin，执行：
+psql -U neikongai_user -d neikongai -h localhost -c "UPDATE users SET role = 'super_admin' WHERE username = 'admin';"
 ```
 
 ---
 
 ## 下一步
 
-恭喜！如果你完成了以上所有步骤，你的 NeikongAI 已经在本地完整运行起来了。接下来你可以：
+恭喜！你的 NeikongAI 已经运行起来了。接下来：
 
 - 📄 阅读 `README.md` 了解项目整体架构
-- 🚀 阅读 `DEPLOYMENT_GUIDE.md` 了解如何把代码部署到服务器
+- 🔑 阅读 `DEPLOYMENT_GUIDE.md` 了解密钥管理和代码更新流程
 - 🔍 阅读 `PROJECT_REPORT.md` 深入了解每个模块的技术细节
-- 💻 打开 http://localhost:8000/docs 探索所有 API 接口
+- 💻 访问 `http://你的域名/api/docs` 探索所有 API 接口
