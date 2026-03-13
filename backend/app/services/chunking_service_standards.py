@@ -2,6 +2,50 @@
 智能分块服务（行业准则版）
 根据不同的文档结构采用不同的分块策略
 当前准则文档统一采用：一条条款 = 一个 chunk
+
+══════════════════════════════════════════════════════════════
+  📌 拆分规则速查（想改规则？直接跳到对应行）
+══════════════════════════════════════════════════════════════
+
+  ① 策略选择入口（如何判断用哪种策略）
+     → chunk_document()            第 20 行
+       - 有章节 + 有条文            → 策略1  chunk_with_chapters()
+       - 无章节 + 有条文            → 策略2  chunk_without_chapters()
+       - 无结构（通知/公告）        → 策略3  chunk_unstructured()
+
+  ② 策略1（有章节结构的准则）
+     → chunk_with_chapters()       第 104 行
+     → _chunk_articles_group()     第 186 行  ← 核心拆分逻辑在这里
+     核心规则（第 214 行注释）：
+       一条条款 = 一个向量块，绝不与其他条合并
+       即：for article in articles → _create_chunk([article], ...)
+
+  ③ 策略2（无章节结构的准则）
+     → chunk_without_chapters()    第 359 行
+     核心规则：同策略1，委托给 _chunk_articles_group()
+
+  ④ 策略3（无结构文档：通知、公告）
+     → chunk_unstructured()        第 375 行
+     核心规则：按段落（\\n\\n 分隔）合并，超过 max_chunk_size(1000字) 就切分
+
+  ⑤ 块的内容组装（每个块里放什么字段）
+     → _create_chunk()             第 228 行
+       - chunk_text：正文（含条号 + 条文内容 + 引用全文）
+       - keywords：从正文提取的关键词列表
+       - chapter_number / article_start 等元数据
+
+  ⑥ 尺寸参数（控制块的大小）
+     → __init__()                  第 14 行
+       - min_chunk_size  = 200     最小字符数
+       - max_chunk_size  = 1000    最大字符数（策略3 用）
+       - target_chunk_size = 500   目标字符数（当前策略1/2 未使用）
+       - articles_per_chunk = 3    保留参数，当前未使用
+
+══════════════════════════════════════════════════════════════
+  📂 文件位置：backend/app/services/chunking_service_standards.py
+  📂 法律版本：backend/app/services/chunking_service.py
+  📂 被哪里调用：backend/app/services/document_processor_standards.py
+══════════════════════════════════════════════════════════════
 """
 
 from typing import Dict, List, Tuple

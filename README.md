@@ -82,3 +82,34 @@ neikongai/
 ├── homepage/               # 首页静态文件
 └── homepage-src/           # 首页源码
 ```
+
+---
+
+## ✂️ 拆分规则代码在哪里？
+
+文档上传后，后端会自动把文本拆分成多个向量块（chunk），用于向量检索。拆分规则集中在以下两个文件：
+
+| 文档类型 | 拆分规则文件 | 被哪里调用 |
+|---------|------------|----------|
+| **法律文档**（法律、法规）| `backend/app/services/chunking_service.py` | `document_processor.py` |
+| **行业准则**（标准、准则）| `backend/app/services/chunking_service_standards.py` | `document_processor_standards.py` |
+
+### 当前拆分规则（一句话）
+
+> **一条法条 / 一条条款 = 一个向量块**，不合并、不拆分。章节信息（章号、节号）作为元数据保留在块里。
+
+### 三种策略（两个文件共用同一框架）
+
+| 策略 | 触发条件 | 对应方法 |
+|------|---------|---------|
+| 策略1 | 文档有章节 + 有条文 | `chunk_with_chapters()` |
+| 策略2 | 文档无章节，只有条文 | `chunk_without_chapters()` |
+| 策略3 | 无结构文档（通知/公告）| `chunk_unstructured()`，按段落大小切分 |
+
+### 想修改拆分规则？
+
+- **改变"每条 = 一块"的规则** → 找 `_chunk_articles_group()`（准则版）或 `chunk_with_chapters()` 中的 for 循环逻辑
+- **改变块的大小限制** → 修改 `__init__` 中的 `max_chunk_size`（默认 1000 字）
+- **改变块的内容结构** → 修改 `_create_chunk()` 方法
+
+> 💡 两个文件顶部的注释块里有完整的**行号速查表**，打开文件直接看即可。
