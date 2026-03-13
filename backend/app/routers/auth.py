@@ -167,3 +167,53 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     finally:
         cursor.close()
         conn.close()
+
+
+async def require_admin(token: str = Depends(oauth2_scheme)):
+    """验证用户已登录且具有管理员权限（super_admin 或 company_admin）"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        role: str = payload.get("role", "")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    # 检查管理员权限
+    admin_roles = {"super_admin", "company_admin"}
+    if role not in admin_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，需要管理员身份（super_admin 或 company_admin）",
+        )
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "SELECT id, username, email, created_at, role FROM users WHERE username = %s",
+            (username,)
+        )
+        user = cursor.fetchone()
+
+        if user is None:
+            raise credentials_exception
+
+        return {
+            "id": str(user[0]),
+            "username": user[1],
+            "email": user[2],
+            "created_at": user[3],
+            "role": user[4],
+        }
+    finally:
+        cursor.close()
+        conn.close()

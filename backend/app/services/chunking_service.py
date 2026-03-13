@@ -1,7 +1,48 @@
 """
-智能分块服务
+智能分块服务（法律文档版）
 根据不同的法律结构采用不同的分块策略
 当前法律条文统一采用：一条法条 = 一个 chunk
+
+══════════════════════════════════════════════════════════════
+  📌 拆分规则速查（想改规则？直接跳到对应行）
+══════════════════════════════════════════════════════════════
+
+  ① 策略选择入口（如何判断用哪种策略）
+     → chunk_document()          第 20 行
+       - 有章节 + 有条文          → 策略1  chunk_with_chapters()
+       - 无章节 + 有条文          → 策略2  chunk_without_chapters()
+       - 无结构（通知/公告）      → 策略3  chunk_unstructured()
+
+  ② 策略1（有章节结构的法律）
+     → chunk_with_chapters()     第 95 行
+     核心规则：逐条循环，每条单独调用 _create_chunk([article], ...)
+     即：一条法条 = 一个向量块，章节信息作为元数据保留
+
+  ③ 策略2（无章节结构的法律）
+     → chunk_without_chapters()  第 284 行
+     核心规则：同策略1，逐条生成块
+
+  ④ 策略3（无结构文档：通知、公告）
+     → chunk_unstructured()      第 296 行
+     核心规则：按段落（\\n\\n 分隔）合并，超过 max_chunk_size(1000字) 就切分
+
+  ⑤ 块的内容组装（每个块里放什么字段）
+     → _create_chunk()           第 188 行
+       - chunk_text：正文（含条号 + 条文内容 + 引用全文）
+       - keywords：从正文提取的关键词列表
+       - chapter_number / article_start 等元数据
+
+  ⑥ 尺寸参数（控制块的大小）
+     → __init__()                第 14 行
+       - min_chunk_size  = 200   最小字符数
+       - max_chunk_size  = 1000  最大字符数（策略3 用）
+       - target_chunk_size = 500 目标字符数（当前策略1/2 未使用）
+
+══════════════════════════════════════════════════════════════
+  📂 文件位置：backend/app/services/chunking_service.py
+  📂 准则版本：backend/app/services/chunking_service_standards.py
+  📂 被哪里调用：backend/app/services/document_processor.py
+══════════════════════════════════════════════════════════════
 """
 
 from typing import Dict, List

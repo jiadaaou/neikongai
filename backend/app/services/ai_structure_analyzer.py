@@ -103,7 +103,7 @@ class AIStructureAnalyzer:
         try:
             response = Generation.call(
                 model=self.model,
-                prompt=prompt,
+                messages=[{"role": "user", "content": prompt}],
                 result_format='message'
             )
             
@@ -267,7 +267,7 @@ class AIStructureAnalyzer:
         try:
             response = Generation.call(
                 model=self.model,
-                prompt=prompt,
+                messages=[{"role": "user", "content": prompt}],
                 result_format='message'
             )
             
@@ -463,7 +463,7 @@ class AIStructureAnalyzer:
             
             response = Generation.call(
                 model=self.model,
-                prompt=prompt,
+                messages=[{"role": "user", "content": prompt}],
                 result_format='message'
             )
             
