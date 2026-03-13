@@ -2,12 +2,12 @@
 
 AI-Powered Compliance Management Website（AI 驱动的企业内控合规管理系统）
 
-## 🚀 第一次运行？从这里开始
+## 🚀 部署到服务器？从这里开始
 
-> **[📖 小白入门指南 → GETTING_STARTED.md](./GETTING_STARTED.md)**  
-> 📌 **已有服务器（PostgreSQL / Python / Node.js 已装好）**：直接看"情况 A"，10 步完成部署  
-> 📌 **在本地电脑从零开始**：看"情况 B"，含软件安装步骤  
-> 💡 文档中解释了 GitHub 和服务器的关系、.env 配置、Nginx 设置、systemd 服务管理等
+> **[📖 服务器部署指南 → GETTING_STARTED.md](./GETTING_STARTED.md)**  
+> 适用于服务器上已装好 PostgreSQL / Redis / MinIO / Python / Node.js / Nginx 的情况  
+> 步骤一~步骤十：git clone → 建库 → 配置 .env → pip install → systemd → npm build → Nginx  
+> 💡 文档开头解释了"GitHub 只存代码、服务器才是运行的地方"这个核心概念
 
 ---
 
