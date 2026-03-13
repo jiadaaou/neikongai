@@ -2,6 +2,13 @@
 
 AI-Powered Compliance Management Website（AI 驱动的企业内控合规管理系统）
 
+## 🚀 第一次运行？从这里开始
+
+> **[📖 小白入门指南 → GETTING_STARTED.md](./GETTING_STARTED.md)**  
+> 覆盖：数据库安装 → 建表 → 配置 API Key → 启动前后端 → 上传第一个文档 → AI 问答全流程
+
+---
+
 ## 项目简介
 
 NeikongAI 是一个多租户法律知识库 + 企业内控系统，集成了通义千问大模型，支持：
